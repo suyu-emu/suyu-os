@@ -1,0 +1,6 @@
+[submodule "airootfs/home/suyu/suyu.wiki"]
+	path = airootfs/home/suyu/suyu.wiki
+	url = https://git.suyu.dev/suyu/suyu.wiki.git
+[submodule "airootfs/home/suyu/suyu"]
+	path = airootfs/home/suyu/suyu
+	url = https://git.suyu.dev/suyu/suyu.git
