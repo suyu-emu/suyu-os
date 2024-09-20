@@ -154,3 +154,5 @@ unzip
 gamemode
 ccache
 vulkan-icd-loader
+mesa
+nvidia-utils
