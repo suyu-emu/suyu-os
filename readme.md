@@ -10,5 +10,5 @@
 
 <br><br>
 
-<h4>The world's first and only operating system that is dedicated to Nintendo Switch Emulation
+<h4>The world's first and only operating system that is dedicated to Nintendo Switch Emulation, although it will have minimised support for modern gen gaming as a whole at a later time.
 </h4> 
