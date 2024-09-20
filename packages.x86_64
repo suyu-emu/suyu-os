@@ -153,3 +153,4 @@ zip
 unzip
 gamemode
 ccache
+vulkan-icd-loader
