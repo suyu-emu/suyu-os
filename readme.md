@@ -12,3 +12,5 @@
 
 <h4>The world's first and only operating system that is dedicated to Nintendo Switch Emulation, although it will have minimised support for modern gen gaming as a whole at a later time.
 </h4> 
+
+<h4>To Test and Contribute, Try Building the ISO using the BUILDING.md</h4> 
