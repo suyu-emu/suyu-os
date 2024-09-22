@@ -11,7 +11,6 @@
 <br><br>
 
 <h3 align="center"><b>Dependencses</b></h3>
-### Dependencies
 
 You'll need to download and install the following to build suyu:
 
