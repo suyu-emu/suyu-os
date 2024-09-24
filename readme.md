@@ -1,6 +1,6 @@
 <h1 align="center">
   <br>
-  <a href="https://suyu.dev"><img src="https://git.suyu.dev/suyu/suyu-os/src/branch/master/ui/Logo.png" alt="suyuOS" height="128"></a>
+  <a href="https://suyu.dev"><img src="https://git.suyu.dev/suyu/suyu-os/src/branch/master/ui/Logo.svg" alt="suyuOS" height="128"></a>
   <br>
   <b>suyu</b>
   <br>
