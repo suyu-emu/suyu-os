@@ -1,10 +1,11 @@
 [Desktop Entry]
 Name=suyuOS Gaming Launcher
 Comment=Launch Nintendo Switch games with automatic emulator selection
-Exec=suyuos-launcher
+Exec=suyuos-launcher %F
 Icon=applications-games
 Terminal=false
 Type=Application
 Categories=Game;Emulator;
 Keywords=switch;nintendo;emulator;gaming;suyu;eden;
 StartupNotify=true
+MimeType=application/x-nintendo-nsp;application/x-nintendo-xci;application/x-nintendo-nca;application/x-nintendo-nro;application/x-nintendo-nso;

@@ -1,0 +1,14 @@
+[Unit]
+Description=suyuOS First Boot Setup
+After=graphical-session.target
+Wants=graphical-session.target
+ConditionPathExists=!/var/lib/suyuos/setup-complete
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/suyuos-setup
+User=root
+
+[Install]
+WantedBy=graphical-session.target

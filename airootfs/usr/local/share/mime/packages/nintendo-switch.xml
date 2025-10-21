@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+    <!-- Nintendo Switch Package -->
+    <mime-type type="application/x-nintendo-nsp">
+        <comment>Nintendo Switch Package</comment>
+        <comment xml:lang="en">Nintendo Switch Package</comment>
+        <icon name="applications-games"/>
+        <glob pattern="*.nsp"/>
+        <magic priority="50">
+            <match value="PFS0" type="string" offset="0"/>
+        </magic>
+    </mime-type>
+
+    <!-- Nintendo Switch Cartridge Image -->
+    <mime-type type="application/x-nintendo-xci">
+        <comment>Nintendo Switch Cartridge Image</comment>
+        <comment xml:lang="en">Nintendo Switch Cartridge Image</comment>
+        <icon name="applications-games"/>
+        <glob pattern="*.xci"/>
+        <magic priority="50">
+            <match value="HEAD" type="string" offset="256"/>
+        </magic>
+    </mime-type>
+
+    <!-- Nintendo Content Archive -->
+    <mime-type type="application/x-nintendo-nca">
+        <comment>Nintendo Content Archive</comment>
+        <comment xml:lang="en">Nintendo Content Archive</comment>
+        <icon name="applications-games"/>
+        <glob pattern="*.nca"/>
+        <magic priority="50">
+            <match value="NCA3" type="string" offset="512"/>
+        </magic>
+    </mime-type>
+
+    <!-- Nintendo Switch Executable -->
+    <mime-type type="application/x-nintendo-nro">
+        <comment>Nintendo Switch Executable</comment>
+        <comment xml:lang="en">Nintendo Switch Executable</comment>
+        <icon name="applications-games"/>
+        <glob pattern="*.nro"/>
+        <magic priority="50">
+            <match value="NRO0" type="string" offset="16"/>
+        </magic>
+    </mime-type>
+
+    <!-- Nintendo Switch System Object -->
+    <mime-type type="application/x-nintendo-nso">
+        <comment>Nintendo Switch System Object</comment>
+        <comment xml:lang="en">Nintendo Switch System Object</comment>
+        <icon name="applications-games"/>
+        <glob pattern="*.nso"/>
+        <magic priority="50">
+            <match value="NSO0" type="string" offset="0"/>
+        </magic>
+    </mime-type>
+
+    <!-- Nintendo Switch Firmware -->
+    <mime-type type="application/x-nintendo-firmware">
+        <comment>Nintendo Switch Firmware</comment>
+        <comment xml:lang="en">Nintendo Switch Firmware</comment>
+        <icon name="applications-games"/>
+        <glob pattern="*.bin"/>
+        <glob pattern="*.fw"/>
+    </mime-type>
+</mime-info>
