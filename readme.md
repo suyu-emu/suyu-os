@@ -44,4 +44,4 @@ This software is provided for educational and research purposes. Users are respo
 4. Place your legally obtained game files in the ~/Games directory
 5. Launch games using the suyuOS launcher
 
-For detailed building instructions, see [BUILDING.md](BUILDING.md) 
+For detailed building instructions, see [BUILDING.md](BUILDING.md)
