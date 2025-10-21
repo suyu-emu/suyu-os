@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # suyuOS First Boot Setup Script
-# Configures the system for optimal Nintendo Switch emulation and gaming
+# Configures the system for optimal handheld console emulation and gaming
 
 set -e
 
@@ -159,21 +159,21 @@ setup_emulators() {
 setup_controllers() {
     log "Configuring controller support..."
     
-    # Add udev rules for Nintendo Switch controllers
-    cat > /etc/udev/rules.d/99-nintendo-switch-controllers.conf << 'EOF'
-# Nintendo Switch Pro Controller
+    # Add udev rules for handheld console controllers
+    cat > /etc/udev/rules.d/99-handheld-console-controllers.conf << 'EOF'
+# Handheld Console Pro Controller
 SUBSYSTEM=="usb", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2009", MODE="0666", TAG+="uaccess"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2009", MODE="0666", TAG+="uaccess"
 
-# Nintendo Switch Joy-Con (L)
+# Handheld Console Joy-Con (L)
 SUBSYSTEM=="usb", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2006", MODE="0666", TAG+="uaccess"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2006", MODE="0666", TAG+="uaccess"
 
-# Nintendo Switch Joy-Con (R)
+# Handheld Console Joy-Con (R)
 SUBSYSTEM=="usb", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2007", MODE="0666", TAG+="uaccess"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2007", MODE="0666", TAG+="uaccess"
 
-# Nintendo Switch Joy-Con Charging Grip
+# Handheld Console Joy-Con Charging Grip
 SUBSYSTEM=="usb", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="200e", MODE="0666", TAG+="uaccess"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="200e", MODE="0666", TAG+="uaccess"
 EOF
@@ -217,9 +217,9 @@ create_welcome() {
  ███████║╚██████╔╝   ██║   ╚██████╔╝╚██████╔╝███████║
  ╚══════╝ ╚═════╝    ╚═╝    ╚═════╝  ╚═════╝ ╚══════╝
 
-Welcome to suyuOS - Nintendo Switch Gaming Operating System!
+Welcome to suyuOS - Handheld Console Gaming Operating System!
 
-This system is optimized for Nintendo Switch emulation and gaming.
+This system is optimized for handheld console emulation and gaming.
 
 Quick Start:
 - Launch games: suyuos-launcher
@@ -259,7 +259,7 @@ main() {
     touch "$SETUP_COMPLETE"
     
     log "suyuOS setup completed successfully!"
-    log "System is ready for Nintendo Switch gaming!"
+    log "System is ready for handheld console gaming!"
     
     # Show completion message
     echo "suyuOS setup completed! Please reboot to apply all optimizations."

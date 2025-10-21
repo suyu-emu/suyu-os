@@ -4,13 +4,11 @@
 iso_name="suyuos"
 iso_label="SUYUOS_$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y%m)"
 iso_publisher="suyuOS Project <https://suyu.dev>"
-iso_application="suyuOS - Nintendo Switch Gaming OS"
+iso_application="suyuOS - Handheld Console Gaming OS"
 iso_version="$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y.%m.%d)"
 install_dir="suyuos"
 buildmodes=('iso')
-bootmodes=('bios.syslinux.mbr' 'bios.syslinux.eltorito'
-           'uefi-ia32.grub.esp' 'uefi-x64.grub.esp'
-           'uefi-ia32.grub.eltorito' 'uefi-x64.grub.eltorito')
+bootmodes=('bios.syslinux' 'uefi.grub')
 arch="x86_64"
 pacman_conf="pacman.conf"
 airootfs_image_type="squashfs"
