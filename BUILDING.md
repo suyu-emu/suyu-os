@@ -27,6 +27,9 @@ You'll need the following to build suyuOS:
 # Update system and install archiso
 sudo pacman -Syu archiso
 
+# Install grub (required for UEFI boot support validation)
+sudo pacman -S grub
+
 # Install additional build dependencies
 sudo pacman -S git base-devel cmake ninja qt5-base qt5-tools
 sudo pacman -S vulkan-headers vulkan-validation-layers
@@ -120,6 +123,11 @@ docker run --privileged -v $(pwd):/workspace archlinux:latest \
 **Package not found errors:**
 - Ensure your Arch Linux system is up to date
 - Check if packages exist in AUR and install manually if needed
+
+**grub-install validation errors:**
+- Install grub on the host system: `sudo pacman -S grub`
+- This is required for UEFI boot support validation, even if grub is included in the ISO packages
+- The error occurs during mkarchiso profile validation before the actual build starts
 
 **Emulator build failures:**
 - Check internet connectivity for repository cloning
