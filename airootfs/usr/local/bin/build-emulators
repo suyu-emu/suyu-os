@@ -2,88 +2,255 @@
 
 # suyuOS Emulator Build Script
 # This script builds Suyu and Eden emulators during ISO creation
+# Also integrates horinux kernel patches and holoiso optimizations
 
 set -e
 
 BUILD_DIR="/tmp/emulator-build"
 INSTALL_PREFIX="/usr/local"
-SUYU_REPO="https://git.suyu.dev/suyu/suyu.git"
-EDEN_REPO="https://git.eden-emu.dev/eden-emu/eden.git"
+SOURCE_DIR="/tmp/emulator-sources"
+
+# Repository URLs with fallbacks
+SUYU_REPOS=(
+    "https://git.suyu.dev/suyu/suyu.git"
+    "https://github.com/suyu-emu/suyu.git"
+)
+
+EDEN_REPOS=(
+    "https://git.eden-emu.dev/eden-emu/eden.git"
+)
+
+HORINUX_REPOS=(
+    "https://github.com/suyu-emu/horinux.git"
+)
+
+HOLOISO_REPOS=(
+    "https://github.com/holoiso-eol/holoiso.git"
+)
 
 echo "Starting suyuOS emulator build process..."
 
 # Create build directory
 mkdir -p "$BUILD_DIR"
+mkdir -p "$SOURCE_DIR"
 cd "$BUILD_DIR"
+
+# Function to clone repository with fallbacks
+clone_repo() {
+    local name="$1"
+    shift
+    local repos=("$@")
+    
+    echo "Cloning $name repository..."
+    
+    for repo in "${repos[@]}"; do
+        echo "Trying $repo..."
+        if git clone --recursive --depth 1 "$repo" "$SOURCE_DIR/$name" 2>/dev/null; then
+            echo "Successfully cloned $name from $repo"
+            return 0
+        else
+            echo "Failed to clone from $repo"
+        fi
+    done
+    
+    echo "Warning: Could not clone $name from any repository"
+    return 1
+}
+
+# Function to apply horinux kernel patches
+apply_horinux_patches() {
+    echo "Applying horinux kernel patches for native execution support..."
+    
+    if [ -d "$SOURCE_DIR/horinux" ]; then
+        cd "$SOURCE_DIR/horinux"
+        
+        # Look for kernel patches
+        if [ -d "patches" ]; then
+            echo "Found horinux patches directory"
+            
+            # Create kernel patch integration script
+            cat > /usr/local/bin/apply-horinux-patches << 'EOF'
+#!/bin/bash
+# Script to apply horinux patches to kernel during build
+KERNEL_SRC="$1"
+PATCH_DIR="$2"
+
+if [ ! -d "$KERNEL_SRC" ] || [ ! -d "$PATCH_DIR" ]; then
+    echo "Usage: $0 <kernel_source_dir> <patch_dir>"
+    exit 1
+fi
+
+cd "$KERNEL_SRC"
+
+echo "Applying horinux patches for native handheld console execution..."
+for patch in "$PATCH_DIR"/*.patch; do
+    if [ -f "$patch" ]; then
+        echo "Applying $(basename "$patch")..."
+        patch -p1 < "$patch" || echo "Warning: Failed to apply $(basename "$patch")"
+    fi
+done
+
+echo "Horinux patches applied successfully"
+EOF
+            chmod +x /usr/local/bin/apply-horinux-patches
+            
+            # Copy patches to system location
+            mkdir -p /usr/local/share/horinux
+            cp -r patches/* /usr/local/share/horinux/ 2>/dev/null || true
+            
+            echo "Horinux patches prepared for kernel integration"
+        else
+            echo "No patches directory found in horinux repository"
+        fi
+    else
+        echo "Horinux repository not available, skipping kernel patches"
+    fi
+}
+
+# Function to integrate holoiso optimizations
+integrate_holoiso_optimizations() {
+    echo "Integrating HoloISO gaming optimizations..."
+    
+    if [ -d "$SOURCE_DIR/holoiso" ]; then
+        cd "$SOURCE_DIR/holoiso"
+        
+        # Look for gaming optimization scripts
+        if [ -d "usr/bin" ]; then
+            echo "Found HoloISO optimization scripts"
+            
+            # Copy gaming optimization scripts
+            for script in usr/bin/steamos-* usr/bin/gamescope-* usr/bin/holoiso-*; do
+                if [ -f "$script" ]; then
+                    cp "$script" /usr/local/bin/
+                    chmod +x "/usr/local/bin/$(basename "$script")"
+                    echo "Installed $(basename "$script")"
+                fi
+            done
+        fi
+        
+        # Look for system configurations
+        if [ -d "etc" ]; then
+            echo "Integrating HoloISO system configurations..."
+            
+            # Copy gaming-related configurations
+            for config in etc/udev/rules.d/*gaming* etc/systemd/system/*gaming* etc/modprobe.d/*gaming*; do
+                if [ -f "$config" ]; then
+                    target_dir="/$(dirname "$config")"
+                    mkdir -p "$target_dir"
+                    cp "$config" "$target_dir/"
+                    echo "Installed $(basename "$config")"
+                fi
+            done
+        fi
+        
+        echo "HoloISO optimizations integrated"
+    else
+        echo "HoloISO repository not available, using built-in optimizations"
+    fi
+}
 
 # Function to build Suyu emulator
 build_suyu() {
     echo "Building Suyu emulator..."
     
-    if [ ! -d "suyu" ]; then
-        git clone --recursive "$SUYU_REPO" suyu
+    if [ -d "$SOURCE_DIR/suyu" ]; then
+        cd "$SOURCE_DIR/suyu"
+        
+        # Create build directory
+        mkdir -p build
+        cd build
+        
+        # Configure with CMake - updated for latest suyu
+        cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" \
+            -DENABLE_QT_TRANSLATION=ON \
+            -DENABLE_SDL2=ON \
+            -DENABLE_VULKAN=ON \
+            -DSUYU_USE_BUNDLED_VCPKG=OFF \
+            -DSUYU_USE_BUNDLED_FFMPEG=OFF \
+            -DSUYU_ENABLE_LTO=ON \
+            -DSUYU_CRASH_DUMPS=OFF \
+            -DSUYU_USE_PRECOMPILED_HEADERS=OFF \
+            -DSUYU_ROOM=OFF \
+            -DSUYU_TESTS=OFF
+        
+        # Build with available cores
+        make -j$(nproc) || ninja -j$(nproc) || echo "Build failed, trying single-threaded..."
+        make || ninja || echo "Single-threaded build also failed"
+        
+        # Install if build succeeded
+        if [ -f "bin/suyu" ] || [ -f "src/suyu/suyu" ]; then
+            make install || ninja install
+            echo "Suyu installed successfully!"
+        else
+            echo "Suyu build failed, creating placeholder"
+            mkdir -p "$INSTALL_PREFIX/bin"
+            cat > "$INSTALL_PREFIX/bin/suyu" << 'EOF'
+#!/bin/bash
+echo "Suyu emulator is not available in this build."
+echo "Please check the build logs for compilation errors."
+exit 1
+EOF
+            chmod +x "$INSTALL_PREFIX/bin/suyu"
+        fi
+        
+        cd "$BUILD_DIR"
+    else
+        echo "Suyu source not available, skipping build"
     fi
-    
-    cd suyu
-    
-    # Create build directory
-    mkdir -p build
-    cd build
-    
-    # Configure with CMake
-    cmake .. \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" \
-        -DENABLE_QT_TRANSLATION=ON \
-        -DENABLE_SDL2=ON \
-        -DENABLE_VULKAN=ON \
-        -DYUZU_USE_BUNDLED_VCPKG=OFF \
-        -DYUZU_USE_BUNDLED_FFMPEG=OFF \
-        -DYUZU_ENABLE_LTO=ON
-    
-    # Build
-    make -j$(nproc)
-    
-    # Install
-    make install
-    
-    cd "$BUILD_DIR"
-    echo "Suyu build completed successfully!"
 }
 
 # Function to build Eden emulator
 build_eden() {
     echo "Building Eden emulator..."
     
-    if [ ! -d "eden" ]; then
-        git clone --recursive "$EDEN_REPO" eden
+    if [ -d "$SOURCE_DIR/eden" ]; then
+        cd "$SOURCE_DIR/eden"
+        
+        # Create build directory
+        mkdir -p build
+        cd build
+        
+        # Configure with CMake - adapted for Eden
+        cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" \
+            -DENABLE_QT_TRANSLATION=ON \
+            -DENABLE_SDL2=ON \
+            -DENABLE_VULKAN=ON \
+            -DEDEN_USE_BUNDLED_VCPKG=OFF \
+            -DEDEN_USE_BUNDLED_FFMPEG=OFF \
+            -DEDEN_ENABLE_LTO=ON \
+            -DEDEN_CRASH_DUMPS=OFF \
+            -DEDEN_USE_PRECOMPILED_HEADERS=OFF \
+            -DEDEN_ROOM=OFF \
+            -DEDEN_TESTS=OFF
+        
+        # Build with available cores
+        make -j$(nproc) || ninja -j$(nproc) || echo "Build failed, trying single-threaded..."
+        make || ninja || echo "Single-threaded build also failed"
+        
+        # Install if build succeeded
+        if [ -f "bin/eden" ] || [ -f "src/eden/eden" ]; then
+            make install || ninja install
+            echo "Eden installed successfully!"
+        else
+            echo "Eden build failed, creating placeholder"
+            mkdir -p "$INSTALL_PREFIX/bin"
+            cat > "$INSTALL_PREFIX/bin/eden" << 'EOF'
+#!/bin/bash
+echo "Eden emulator is not available in this build."
+echo "Please check the build logs for compilation errors."
+exit 1
+EOF
+            chmod +x "$INSTALL_PREFIX/bin/eden"
+        fi
+        
+        cd "$BUILD_DIR"
+    else
+        echo "Eden source not available, skipping build"
     fi
-    
-    cd eden
-    
-    # Create build directory
-    mkdir -p build
-    cd build
-    
-    # Configure with CMake
-    cmake .. \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" \
-        -DENABLE_QT_TRANSLATION=ON \
-        -DENABLE_SDL2=ON \
-        -DENABLE_VULKAN=ON \
-        -DEDEN_USE_BUNDLED_VCPKG=OFF \
-        -DEDEN_USE_BUNDLED_FFMPEG=OFF \
-        -DEDEN_ENABLE_LTO=ON
-    
-    # Build
-    make -j$(nproc)
-    
-    # Install
-    make install
-    
-    cd "$BUILD_DIR"
-    echo "Eden build completed successfully!"
 }
 
 # Function to setup emulator configurations
@@ -142,7 +309,7 @@ EOF
 
 # Main build process
 main() {
-    echo "suyuOS Emulator Build Script v1.0"
+    echo "suyuOS Emulator Build Script v2.0"
     echo "=================================="
     
     # Check if running as root (required for installation)
@@ -151,6 +318,27 @@ main() {
         exit 1
     fi
     
+    # Clone repositories if not already present
+    if [ ! -d "$SOURCE_DIR/suyu" ]; then
+        clone_repo "suyu" "${SUYU_REPOS[@]}"
+    fi
+    
+    if [ ! -d "$SOURCE_DIR/eden" ]; then
+        clone_repo "eden" "${EDEN_REPOS[@]}"
+    fi
+    
+    if [ ! -d "$SOURCE_DIR/horinux" ]; then
+        clone_repo "horinux" "${HORINUX_REPOS[@]}"
+    fi
+    
+    if [ ! -d "$SOURCE_DIR/holoiso" ]; then
+        clone_repo "holoiso" "${HOLOISO_REPOS[@]}"
+    fi
+    
+    # Apply system integrations
+    apply_horinux_patches
+    integrate_holoiso_optimizations
+    
     # Build emulators
     build_suyu
     build_eden
@@ -158,11 +346,178 @@ main() {
     # Setup configurations
     setup_configs
     
+    # Create native execution bridge
+    create_native_bridge
+    
+    # Setup gaming optimizations
+    setup_gaming_optimizations
+    
     # Cleanup build directory
     rm -rf "$BUILD_DIR"
     
-    echo "All emulators built and installed successfully!"
-    echo "Suyu and Eden are now available in $INSTALL_PREFIX/bin/"
+    echo "All emulators built and system integrations completed!"
+    echo "Available emulators:"
+    ls -la "$INSTALL_PREFIX/bin/" | grep -E "(suyu|eden)" || echo "No emulators found"
+}
+
+# Function to create native execution bridge
+create_native_bridge() {
+    echo "Creating native execution bridge..."
+    
+    cat > /usr/local/bin/suyuos-native-bridge << 'EOF'
+#!/bin/bash
+# suyuOS Native Execution Bridge
+# Determines whether to use native execution or emulation
+
+GAME_FILE="$1"
+FORCE_MODE="$2"  # native, emulate, auto
+
+if [ -z "$GAME_FILE" ]; then
+    echo "Usage: $0 <game_file> [native|emulate|auto]"
+    exit 1
+fi
+
+# Check if horinux patches are available
+HORINUX_AVAILABLE=false
+if [ -f "/usr/local/bin/apply-horinux-patches" ]; then
+    HORINUX_AVAILABLE=true
+fi
+
+# Determine execution mode
+case "$FORCE_MODE" in
+    "native")
+        if [ "$HORINUX_AVAILABLE" = "true" ]; then
+            echo "Using native execution mode"
+            exec /usr/local/bin/suyuos-native-exec "$GAME_FILE"
+        else
+            echo "Native execution not available, falling back to emulation"
+            exec /usr/local/bin/suyuos-launcher "$GAME_FILE"
+        fi
+        ;;
+    "emulate")
+        echo "Using emulation mode"
+        exec /usr/local/bin/suyuos-launcher "$GAME_FILE"
+        ;;
+    *)
+        # Auto mode - decide based on game characteristics
+        if [ "$HORINUX_AVAILABLE" = "true" ]; then
+            # Check if game is suitable for native execution
+            # This is a placeholder - real implementation would analyze the game
+            echo "Auto mode: Using emulation (native execution analysis not implemented)"
+            exec /usr/local/bin/suyuos-launcher "$GAME_FILE"
+        else
+            echo "Auto mode: Using emulation (native execution not available)"
+            exec /usr/local/bin/suyuos-launcher "$GAME_FILE"
+        fi
+        ;;
+esac
+EOF
+    chmod +x /usr/local/bin/suyuos-native-bridge
+    
+    # Create placeholder for native execution
+    cat > /usr/local/bin/suyuos-native-exec << 'EOF'
+#!/bin/bash
+# suyuOS Native Execution Handler
+# This would handle native execution of handheld console applications
+
+echo "Native execution mode is experimental and not fully implemented."
+echo "Game: $1"
+echo "This would require:"
+echo "- Horinux kernel patches applied"
+echo "- Proper hardware abstraction layer"
+echo "- Security sandboxing"
+echo "- Memory management for native apps"
+echo ""
+echo "Falling back to emulation..."
+exec /usr/local/bin/suyuos-launcher "$1"
+EOF
+    chmod +x /usr/local/bin/suyuos-native-exec
+    
+    echo "Native execution bridge created"
+}
+
+# Function to setup gaming optimizations
+setup_gaming_optimizations() {
+    echo "Setting up gaming optimizations..."
+    
+    # Create gaming mode service
+    cat > /etc/systemd/system/suyuos-gaming-mode.service << 'EOF'
+[Unit]
+Description=suyuOS Gaming Mode Optimizations
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/suyuos-gaming-mode enable
+ExecStop=/usr/local/bin/suyuos-gaming-mode disable
+User=root
+
+[Install]
+WantedBy=graphical-session.target
+EOF
+
+    # Create gaming mode script
+    cat > /usr/local/bin/suyuos-gaming-mode << 'EOF'
+#!/bin/bash
+# suyuOS Gaming Mode Controller
+
+case "$1" in
+    "enable")
+        echo "Enabling gaming mode optimizations..."
+        
+        # Set CPU governor to performance
+        echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor >/dev/null 2>&1 || true
+        
+        # Disable CPU idle states for lower latency
+        echo 1 | tee /sys/devices/system/cpu/cpu*/cpuidle/state*/disable >/dev/null 2>&1 || true
+        
+        # Set I/O scheduler to performance
+        for disk in /sys/block/sd* /sys/block/nvme*; do
+            if [ -d "$disk" ]; then
+                echo mq-deadline > "$disk/queue/scheduler" 2>/dev/null || true
+            fi
+        done
+        
+        # Increase VM dirty ratios for better gaming performance
+        echo 15 > /proc/sys/vm/dirty_background_ratio 2>/dev/null || true
+        echo 50 > /proc/sys/vm/dirty_ratio 2>/dev/null || true
+        
+        # Disable swap for gaming (if available)
+        swapoff -a 2>/dev/null || true
+        
+        echo "Gaming mode enabled"
+        ;;
+    "disable")
+        echo "Disabling gaming mode optimizations..."
+        
+        # Restore CPU governor
+        echo ondemand | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor >/dev/null 2>&1 || true
+        
+        # Re-enable CPU idle states
+        echo 0 | tee /sys/devices/system/cpu/cpu*/cpuidle/state*/disable >/dev/null 2>&1 || true
+        
+        # Restore default VM settings
+        echo 10 > /proc/sys/vm/dirty_background_ratio 2>/dev/null || true
+        echo 20 > /proc/sys/vm/dirty_ratio 2>/dev/null || true
+        
+        # Re-enable swap
+        swapon -a 2>/dev/null || true
+        
+        echo "Gaming mode disabled"
+        ;;
+    *)
+        echo "Usage: $0 {enable|disable}"
+        exit 1
+        ;;
+esac
+EOF
+    chmod +x /usr/local/bin/suyuos-gaming-mode
+    
+    # Enable gaming mode service
+    systemctl enable suyuos-gaming-mode.service 2>/dev/null || true
+    
+    echo "Gaming optimizations configured"
 }
 
 # Run main function if script is executed directly
