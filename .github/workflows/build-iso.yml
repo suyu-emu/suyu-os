@@ -28,6 +28,12 @@ jobs:
       options: --privileged
     
     steps:
+    - name: Install Git and base tools
+      run: |
+        # Update system and install Git first (required for checkout)
+        pacman -Syu --noconfirm
+        pacman -S --noconfirm git
+
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
@@ -36,9 +42,8 @@ jobs:
 
     - name: Setup Arch Linux environment
       run: |
-        # Update system and install base packages
-        pacman -Syu --noconfirm
-        pacman -S --noconfirm base-devel git archiso squashfs-tools
+        # Install base packages
+        pacman -S --noconfirm base-devel archiso squashfs-tools
         
         # Install build dependencies
         pacman -S --noconfirm cmake ninja gcc clang llvm
