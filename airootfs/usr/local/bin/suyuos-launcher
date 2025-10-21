@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 
 # suyuOS Gaming Launcher
-# Unified launcher for Switch games with automatic emulator selection
+# Unified launcher for handheld console games with automatic emulator selection
 
 set -e
 
 SUYU_BIN="/usr/local/bin/suyu"
 EDEN_BIN="/usr/local/bin/eden"
+NATIVE_BRIDGE="/usr/local/bin/suyuos-native-bridge"
 GAMES_DIR="$HOME/Games"
 CONFIG_DIR="$HOME/.config/suyuos"
 LAUNCHER_CONFIG="$CONFIG_DIR/launcher.conf"
@@ -25,6 +26,8 @@ ENABLE_MANGOHUD=false
 FULLSCREEN_DEFAULT=true
 VSYNC_DEFAULT=true
 PERFORMANCE_MODE=balanced
+EXECUTION_MODE=auto
+ENABLE_NATIVE_BRIDGE=true
 EOF
 }
 
@@ -101,7 +104,22 @@ launch_game() {
     local emulator_bin
     local launch_cmd=""
     
-    # Detect appropriate emulator
+    # Check if native bridge should be used
+    if [ "$ENABLE_NATIVE_BRIDGE" = "true" ] && [ -x "$NATIVE_BRIDGE" ]; then
+        echo "Using native execution bridge for $(basename "$game_file")..."
+        
+        # Setup performance optimizations
+        setup_performance
+        
+        # Launch through native bridge
+        "$NATIVE_BRIDGE" "$game_file" "$EXECUTION_MODE"
+        
+        # Restore performance settings
+        restore_performance
+        return
+    fi
+    
+    # Fallback to traditional emulator detection
     emulator_bin=$(detect_emulator "$game_file")
     if [ $? -ne 0 ]; then
         echo "$emulator_bin"
@@ -148,7 +166,7 @@ show_library() {
     
     if [ ! -d "$GAMES_DIR" ] || [ -z "$(ls -A "$GAMES_DIR" 2>/dev/null)" ]; then
         echo "No games found in $GAMES_DIR"
-        echo "Place your Switch game files (.nsp, .xci, .nca, .nro, .nso) in this directory."
+        echo "Place your handheld console game files (.nsp, .xci, .nca, .nro, .nso) in this directory."
         return
     fi
     
@@ -219,12 +237,15 @@ Options:
   --gamemode          Enable/disable GameMode
   --mangohud          Enable/disable MangoHUD
   --performance MODE  Set performance mode (balanced|performance|powersave)
+  --execution MODE    Set execution mode (auto|native|emulate)
+  --native-bridge     Enable/disable native execution bridge
 
 Examples:
   suyuos-launcher                           # Interactive game selection
   suyuos-launcher game.nsp                  # Launch specific game
   suyuos-launcher -l                        # Show game library
   suyuos-launcher -e eden                   # Set Eden as default emulator
+  suyuos-launcher --execution native        # Force native execution mode
 
 Game files should be placed in: ~/Games/
 Supported formats: .nsp, .xci, .nca, .nro, .nso
