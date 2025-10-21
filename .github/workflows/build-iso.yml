@@ -51,7 +51,7 @@ jobs:
         pacman -S --noconfirm vulkan-headers vulkan-validation-layers
         pacman -S --noconfirm ffmpeg opus libzip zstd lz4 mbedtls
         pacman -S --noconfirm boost catch2 fmt glslang nlohmann-json
-        pacman -S --noconfirm sdl2 libusb hidapi libevdev
+        pacman -S --noconfirm libusb hidapi libevdev
         
         # Install additional gaming dependencies
         pacman -S --noconfirm gamemode mangohud gamescope
