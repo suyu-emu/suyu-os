@@ -1,0 +1,14 @@
+[Unit]
+Description=suyuOS Gaming Optimizations Service
+After=graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/suyuos-optimize
+ExecStop=/usr/local/bin/suyuos-restore
+User=root
+
+[Install]
+WantedBy=graphical-session.target

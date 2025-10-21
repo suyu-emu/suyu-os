@@ -220,3 +220,59 @@ mupen64plus
 snes9x
 vbam-sdl
 stella
+
+# Switch Emulation Dependencies
+vulkan-headers
+vulkan-validation-layers
+spirv-tools
+glfw-wayland
+glfw-x11
+libusb
+hidapi
+libevdev
+libudev0-shim
+libfmt
+rapidjson
+mbedtls2
+cubeb
+discord-rpc
+cpp-httplib
+enet
+libressl
+libzip
+lz4
+zstd
+xbyak
+
+# Audio/Video Codecs for Switch
+ffmpeg4.4
+opus
+vorbis-tools
+libvorbis
+libogg
+
+# Cryptographic Libraries
+libgcrypt
+nettle
+gnutls
+
+# Gaming Optimizations (HoloISO-inspired)
+gamemode
+lib32-gamemode
+mangohud
+lib32-mangohud
+steam-native-runtime
+gamescope
+performance-tweaks
+
+# Controller Support
+libevdev
+xf86-input-evdev
+jstest-gtk
+antimicrox
+
+# File System Support
+fuse2
+fuse3
+ntfs-3g
+exfat-utils

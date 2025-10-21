@@ -1,0 +1,269 @@
+#!/usr/bin/env bash
+
+# suyuOS First Boot Setup Script
+# Configures the system for optimal Nintendo Switch emulation and gaming
+
+set -e
+
+SETUP_DIR="/var/lib/suyuos"
+SETUP_COMPLETE="$SETUP_DIR/setup-complete"
+LOG_FILE="/var/log/suyuos-setup.log"
+
+# Create setup directory
+mkdir -p "$SETUP_DIR"
+
+# Logging function
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S'): $1" | tee -a "$LOG_FILE"
+}
+
+log "Starting suyuOS first boot setup..."
+
+# Hardware detection and optimization
+detect_hardware() {
+    log "Detecting hardware configuration..."
+    
+    # Detect GPU
+    if lspci | grep -i nvidia > /dev/null; then
+        log "NVIDIA GPU detected - configuring NVIDIA optimizations"
+        
+        # Enable NVIDIA persistence daemon
+        systemctl enable nvidia-persistenced 2>/dev/null || true
+        
+        # Configure NVIDIA settings
+        cat > /etc/X11/xorg.conf.d/20-nvidia.conf << 'EOF'
+Section "Device"
+    Identifier "NVIDIA Card"
+    Driver "nvidia"
+    VendorName "NVIDIA Corporation"
+    Option "NoLogo" "true"
+    Option "UseEDID" "false"
+    Option "ConnectedMonitor" "DFP"
+    Option "TripleBuffer" "true"
+    Option "RegistryDwords" "PowerMizerEnable=0x1; PerfLevelSrc=0x2222; PowerMizerDefault=0x1; PowerMizerDefaultAC=0x1"
+EndSection
+EOF
+    fi
+    
+    if lspci | grep -i amd > /dev/null; then
+        log "AMD GPU detected - configuring AMD optimizations"
+        
+        # Configure AMD settings
+        cat > /etc/X11/xorg.conf.d/20-amdgpu.conf << 'EOF'
+Section "Device"
+    Identifier "AMD Graphics"
+    Driver "amdgpu"
+    Option "TearFree" "true"
+    Option "DRI" "3"
+EndSection
+EOF
+    fi
+    
+    # Detect CPU
+    if grep -q "Intel" /proc/cpuinfo; then
+        log "Intel CPU detected - configuring Intel optimizations"
+        echo "intel_pstate=active" >> /etc/default/grub
+    fi
+    
+    if grep -q "AMD" /proc/cpuinfo; then
+        log "AMD CPU detected - configuring AMD optimizations"
+        echo "amd_pstate=active" >> /etc/default/grub
+    fi
+}
+
+# Configure gaming optimizations
+configure_gaming() {
+    log "Configuring gaming optimizations..."
+    
+    # Configure kernel parameters for gaming
+    cat >> /etc/default/grub << 'EOF'
+
+# suyuOS Gaming Optimizations
+GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT mitigations=off preempt=full rcu_nocbs=0-7 isolcpus=nohz,domain,managed_irq,0-7 nohz_full=0-7 rcu_nocb_poll audit=0 quiet splash"
+EOF
+    
+    # Configure sysctl for gaming
+    cat > /etc/sysctl.d/99-suyuos-gaming.conf << 'EOF'
+# suyuOS Gaming Optimizations
+
+# Network optimizations
+net.core.rmem_default = 262144
+net.core.rmem_max = 16777216
+net.core.wmem_default = 262144
+net.core.wmem_max = 16777216
+net.ipv4.tcp_rmem = 4096 65536 16777216
+net.ipv4.tcp_wmem = 4096 65536 16777216
+net.core.netdev_max_backlog = 5000
+
+# Memory optimizations
+vm.swappiness = 10
+vm.dirty_background_ratio = 15
+vm.dirty_ratio = 25
+vm.vfs_cache_pressure = 50
+
+# Scheduler optimizations
+kernel.sched_autogroup_enabled = 0
+kernel.sched_child_runs_first = 1
+kernel.sched_latency_ns = 1000000
+kernel.sched_min_granularity_ns = 100000
+kernel.sched_wakeup_granularity_ns = 25000
+EOF
+    
+    # Configure audio for low latency
+    cat > /etc/pulse/daemon.conf.d/99-suyuos-gaming.conf << 'EOF'
+# suyuOS Audio Optimizations
+default-sample-rate = 48000
+alternate-sample-rate = 44100
+default-fragments = 2
+default-fragment-size-msec = 5
+resample-method = speex-float-1
+enable-lfe-remixing = no
+high-priority = yes
+nice-level = -11
+realtime-scheduling = yes
+realtime-priority = 5
+rlimit-rtprio = 9
+daemonize = no
+EOF
+}
+
+# Setup emulator directories and configurations
+setup_emulators() {
+    log "Setting up emulator directories and configurations..."
+    
+    # Create emulator directories for all users
+    for user_home in /home/*; do
+        if [ -d "$user_home" ]; then
+            user=$(basename "$user_home")
+            
+            # Create game directories
+            sudo -u "$user" mkdir -p "$user_home/Games"
+            sudo -u "$user" mkdir -p "$user_home/.config/suyu"
+            sudo -u "$user" mkdir -p "$user_home/.config/eden"
+            sudo -u "$user" mkdir -p "$user_home/.local/share/suyu"
+            sudo -u "$user" mkdir -p "$user_home/.local/share/eden"
+            
+            # Set proper permissions
+            chown -R "$user:$user" "$user_home/Games"
+            chown -R "$user:$user" "$user_home/.config/suyu"
+            chown -R "$user:$user" "$user_home/.config/eden"
+            chown -R "$user:$user" "$user_home/.local/share/suyu"
+            chown -R "$user:$user" "$user_home/.local/share/eden"
+            
+            log "Created emulator directories for user: $user"
+        fi
+    done
+}
+
+# Configure controller support
+setup_controllers() {
+    log "Configuring controller support..."
+    
+    # Add udev rules for Nintendo Switch controllers
+    cat > /etc/udev/rules.d/99-nintendo-switch-controllers.conf << 'EOF'
+# Nintendo Switch Pro Controller
+SUBSYSTEM=="usb", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2009", MODE="0666", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2009", MODE="0666", TAG+="uaccess"
+
+# Nintendo Switch Joy-Con (L)
+SUBSYSTEM=="usb", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2006", MODE="0666", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2006", MODE="0666", TAG+="uaccess"
+
+# Nintendo Switch Joy-Con (R)
+SUBSYSTEM=="usb", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2007", MODE="0666", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2007", MODE="0666", TAG+="uaccess"
+
+# Nintendo Switch Joy-Con Charging Grip
+SUBSYSTEM=="usb", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="200e", MODE="0666", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="200e", MODE="0666", TAG+="uaccess"
+EOF
+    
+    # Reload udev rules
+    udevadm control --reload-rules
+    udevadm trigger
+}
+
+# Enable gaming services
+enable_services() {
+    log "Enabling gaming services..."
+    
+    # Enable suyuOS gaming optimization service
+    systemctl enable suyuos-gaming.service
+    
+    # Enable GameMode
+    systemctl --global enable gamemoded.service 2>/dev/null || true
+    
+    # Configure automatic login for gaming user
+    if [ -d "/home/suyu" ]; then
+        systemctl enable getty@tty1.service
+        
+        cat > /etc/systemd/system/getty@tty1.service.d/override.conf << 'EOF'
+[Service]
+ExecStart=
+ExecStart=-/usr/bin/agetty --autologin suyu --noclear %I $TERM
+EOF
+    fi
+}
+
+# Create welcome message
+create_welcome() {
+    log "Creating welcome message..."
+    
+    cat > /etc/motd << 'EOF'
+ ███████╗██╗   ██╗██╗   ██╗██╗   ██╗ ██████╗ ███████╗
+ ██╔════╝██║   ██║╚██╗ ██╔╝██║   ██║██╔═══██╗██╔════╝
+ ███████╗██║   ██║ ╚████╔╝ ██║   ██║██║   ██║███████╗
+ ╚════██║██║   ██║  ╚██╔╝  ██║   ██║██║   ██║╚════██║
+ ███████║╚██████╔╝   ██║   ╚██████╔╝╚██████╔╝███████║
+ ╚══════╝ ╚═════╝    ╚═╝    ╚═════╝  ╚═════╝ ╚══════╝
+
+Welcome to suyuOS - Nintendo Switch Gaming Operating System!
+
+This system is optimized for Nintendo Switch emulation and gaming.
+
+Quick Start:
+- Launch games: suyuos-launcher
+- Configure emulators: suyu / eden
+- Game directory: ~/Games/
+- System info: fastfetch
+
+For help and documentation, visit: https://suyu.dev/
+
+EOF
+}
+
+# Update MIME database
+update_mime() {
+    log "Updating MIME database..."
+    update-mime-database /usr/local/share/mime/ 2>/dev/null || true
+    update-desktop-database /usr/local/share/applications/ 2>/dev/null || true
+}
+
+# Main setup function
+main() {
+    log "suyuOS Setup v1.0 - Starting system configuration"
+    
+    # Run setup functions
+    detect_hardware
+    configure_gaming
+    setup_emulators
+    setup_controllers
+    enable_services
+    create_welcome
+    update_mime
+    
+    # Update GRUB configuration
+    grub-mkconfig -o /boot/grub/grub.cfg 2>/dev/null || true
+    
+    # Mark setup as complete
+    touch "$SETUP_COMPLETE"
+    
+    log "suyuOS setup completed successfully!"
+    log "System is ready for Nintendo Switch gaming!"
+    
+    # Show completion message
+    echo "suyuOS setup completed! Please reboot to apply all optimizations."
+}
+
+# Run main function
+main "$@"
