@@ -199,6 +199,7 @@ EOF
     else
         echo "Suyu source not available, skipping build"
     fi
+    echo "Suyu build completed successfully!"
 }
 
 # Function to build Eden emulator
@@ -309,7 +310,7 @@ EOF
 
 # Main build process
 main() {
-    echo "suyuOS Emulator Build Script v2.0"
+    echo "suyuOS Emulator Build Script v1.0"
     echo "=================================="
     
     # Check if running as root (required for installation)
@@ -318,27 +319,6 @@ main() {
         exit 1
     fi
     
-    # Clone repositories if not already present
-    if [ ! -d "$SOURCE_DIR/suyu" ]; then
-        clone_repo "suyu" "${SUYU_REPOS[@]}"
-    fi
-    
-    if [ ! -d "$SOURCE_DIR/eden" ]; then
-        clone_repo "eden" "${EDEN_REPOS[@]}"
-    fi
-    
-    if [ ! -d "$SOURCE_DIR/horinux" ]; then
-        clone_repo "horinux" "${HORINUX_REPOS[@]}"
-    fi
-    
-    if [ ! -d "$SOURCE_DIR/holoiso" ]; then
-        clone_repo "holoiso" "${HOLOISO_REPOS[@]}"
-    fi
-    
-    # Apply system integrations
-    apply_horinux_patches
-    integrate_holoiso_optimizations
-    
     # Build emulators
     build_suyu
     build_eden
@@ -346,178 +326,11 @@ main() {
     # Setup configurations
     setup_configs
     
-    # Create native execution bridge
-    create_native_bridge
-    
-    # Setup gaming optimizations
-    setup_gaming_optimizations
-    
     # Cleanup build directory
     rm -rf "$BUILD_DIR"
     
-    echo "All emulators built and system integrations completed!"
-    echo "Available emulators:"
-    ls -la "$INSTALL_PREFIX/bin/" | grep -E "(suyu|eden)" || echo "No emulators found"
-}
-
-# Function to create native execution bridge
-create_native_bridge() {
-    echo "Creating native execution bridge..."
-    
-    cat > /usr/local/bin/suyuos-native-bridge << 'EOF'
-#!/bin/bash
-# suyuOS Native Execution Bridge
-# Determines whether to use native execution or emulation
-
-GAME_FILE="$1"
-FORCE_MODE="$2"  # native, emulate, auto
-
-if [ -z "$GAME_FILE" ]; then
-    echo "Usage: $0 <game_file> [native|emulate|auto]"
-    exit 1
-fi
-
-# Check if horinux patches are available
-HORINUX_AVAILABLE=false
-if [ -f "/usr/local/bin/apply-horinux-patches" ]; then
-    HORINUX_AVAILABLE=true
-fi
-
-# Determine execution mode
-case "$FORCE_MODE" in
-    "native")
-        if [ "$HORINUX_AVAILABLE" = "true" ]; then
-            echo "Using native execution mode"
-            exec /usr/local/bin/suyuos-native-exec "$GAME_FILE"
-        else
-            echo "Native execution not available, falling back to emulation"
-            exec /usr/local/bin/suyuos-launcher "$GAME_FILE"
-        fi
-        ;;
-    "emulate")
-        echo "Using emulation mode"
-        exec /usr/local/bin/suyuos-launcher "$GAME_FILE"
-        ;;
-    *)
-        # Auto mode - decide based on game characteristics
-        if [ "$HORINUX_AVAILABLE" = "true" ]; then
-            # Check if game is suitable for native execution
-            # This is a placeholder - real implementation would analyze the game
-            echo "Auto mode: Using emulation (native execution analysis not implemented)"
-            exec /usr/local/bin/suyuos-launcher "$GAME_FILE"
-        else
-            echo "Auto mode: Using emulation (native execution not available)"
-            exec /usr/local/bin/suyuos-launcher "$GAME_FILE"
-        fi
-        ;;
-esac
-EOF
-    chmod +x /usr/local/bin/suyuos-native-bridge
-    
-    # Create placeholder for native execution
-    cat > /usr/local/bin/suyuos-native-exec << 'EOF'
-#!/bin/bash
-# suyuOS Native Execution Handler
-# This would handle native execution of handheld console applications
-
-echo "Native execution mode is experimental and not fully implemented."
-echo "Game: $1"
-echo "This would require:"
-echo "- Horinux kernel patches applied"
-echo "- Proper hardware abstraction layer"
-echo "- Security sandboxing"
-echo "- Memory management for native apps"
-echo ""
-echo "Falling back to emulation..."
-exec /usr/local/bin/suyuos-launcher "$1"
-EOF
-    chmod +x /usr/local/bin/suyuos-native-exec
-    
-    echo "Native execution bridge created"
-}
-
-# Function to setup gaming optimizations
-setup_gaming_optimizations() {
-    echo "Setting up gaming optimizations..."
-    
-    # Create gaming mode service
-    cat > /etc/systemd/system/suyuos-gaming-mode.service << 'EOF'
-[Unit]
-Description=suyuOS Gaming Mode Optimizations
-After=graphical-session.target
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/local/bin/suyuos-gaming-mode enable
-ExecStop=/usr/local/bin/suyuos-gaming-mode disable
-User=root
-
-[Install]
-WantedBy=graphical-session.target
-EOF
-
-    # Create gaming mode script
-    cat > /usr/local/bin/suyuos-gaming-mode << 'EOF'
-#!/bin/bash
-# suyuOS Gaming Mode Controller
-
-case "$1" in
-    "enable")
-        echo "Enabling gaming mode optimizations..."
-        
-        # Set CPU governor to performance
-        echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor >/dev/null 2>&1 || true
-        
-        # Disable CPU idle states for lower latency
-        echo 1 | tee /sys/devices/system/cpu/cpu*/cpuidle/state*/disable >/dev/null 2>&1 || true
-        
-        # Set I/O scheduler to performance
-        for disk in /sys/block/sd* /sys/block/nvme*; do
-            if [ -d "$disk" ]; then
-                echo mq-deadline > "$disk/queue/scheduler" 2>/dev/null || true
-            fi
-        done
-        
-        # Increase VM dirty ratios for better gaming performance
-        echo 15 > /proc/sys/vm/dirty_background_ratio 2>/dev/null || true
-        echo 50 > /proc/sys/vm/dirty_ratio 2>/dev/null || true
-        
-        # Disable swap for gaming (if available)
-        swapoff -a 2>/dev/null || true
-        
-        echo "Gaming mode enabled"
-        ;;
-    "disable")
-        echo "Disabling gaming mode optimizations..."
-        
-        # Restore CPU governor
-        echo ondemand | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor >/dev/null 2>&1 || true
-        
-        # Re-enable CPU idle states
-        echo 0 | tee /sys/devices/system/cpu/cpu*/cpuidle/state*/disable >/dev/null 2>&1 || true
-        
-        # Restore default VM settings
-        echo 10 > /proc/sys/vm/dirty_background_ratio 2>/dev/null || true
-        echo 20 > /proc/sys/vm/dirty_ratio 2>/dev/null || true
-        
-        # Re-enable swap
-        swapon -a 2>/dev/null || true
-        
-        echo "Gaming mode disabled"
-        ;;
-    *)
-        echo "Usage: $0 {enable|disable}"
-        exit 1
-        ;;
-esac
-EOF
-    chmod +x /usr/local/bin/suyuos-gaming-mode
-    
-    # Enable gaming mode service
-    systemctl enable suyuos-gaming-mode.service 2>/dev/null || true
-    
-    echo "Gaming optimizations configured"
+    echo "All emulators built and installed successfully!"
+    echo "Suyu and Eden are now available in $INSTALL_PREFIX/bin/"
 }
 
 # Run main function if script is executed directly
