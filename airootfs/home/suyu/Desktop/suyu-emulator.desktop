@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Suyu Emulator
+Comment=Nintendo Switch emulator (Suyu)
+Exec=gamemoderun suyu
+Icon=applications-games
+Terminal=false
+Type=Application
+Categories=Game;Emulator;
+Keywords=switch;nintendo;emulator;suyu;
+StartupNotify=true
+MimeType=application/x-nintendo-nsp;application/x-nintendo-xci;application/x-nintendo-nca;
