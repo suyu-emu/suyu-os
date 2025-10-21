@@ -38,6 +38,7 @@ gpm
 gptfdisk
 grml-zsh-config
 grub
+efitools
 hdparm
 hyperv
 intel-ucode
@@ -147,7 +148,7 @@ nlohmann-json
 openssl
 opus
 qt5-base
-sdl2
+# sdl2 - package not found in repos, using alternatives
 zlib
 zstd
 zip

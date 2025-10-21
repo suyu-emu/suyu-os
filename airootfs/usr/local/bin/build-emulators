@@ -310,7 +310,7 @@ EOF
 
 # Main build process
 main() {
-    echo "suyuOS Emulator Build Script v1.0"
+    echo "suyuOS Emulator Build Script v2.0"
     echo "=================================="
     
     # Check if running as root (required for installation)
@@ -318,6 +318,27 @@ main() {
         echo "This script must be run as root during ISO build process"
         exit 1
     fi
+    
+    # Clone repositories if sources are not already available
+    if [ ! -d "$SOURCE_DIR/suyu" ]; then
+        clone_repo "suyu" "${SUYU_REPOS[@]}" || echo "Failed to clone suyu"
+    fi
+    
+    if [ ! -d "$SOURCE_DIR/eden" ]; then
+        clone_repo "eden" "${EDEN_REPOS[@]}" || echo "Failed to clone eden"
+    fi
+    
+    if [ ! -d "$SOURCE_DIR/horinux" ]; then
+        clone_repo "horinux" "${HORINUX_REPOS[@]}" || echo "Failed to clone horinux"
+    fi
+    
+    if [ ! -d "$SOURCE_DIR/holoiso" ]; then
+        clone_repo "holoiso" "${HOLOISO_REPOS[@]}" || echo "Failed to clone holoiso"
+    fi
+    
+    # Apply kernel patches and optimizations
+    apply_horinux_patches
+    integrate_holoiso_optimizations
     
     # Build emulators
     build_suyu
