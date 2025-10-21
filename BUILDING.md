@@ -180,4 +180,3 @@ This build system creates an operating system for educational and research purpo
 
 The build process does not include any copyrighted material and relies only on open-source components.
 
-
