@@ -4,7 +4,7 @@
 iso_name="suyuos"
 iso_label="SUYUOS_$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y%m)"
 iso_publisher="suyuOS Project <https://suyu.dev>"
-iso_application="suyuOS - Nintendo Switch Gaming OS"
+iso_application="suyuOS - Handheld Console Gaming OS"
 iso_version="$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y.%m.%d)"
 install_dir="suyuos"
 buildmodes=('iso')

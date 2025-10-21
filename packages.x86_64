@@ -221,7 +221,7 @@ snes9x
 vbam-sdl
 stella
 
-# Switch Emulation Dependencies
+# Handheld Console Emulation Dependencies
 vulkan-headers
 vulkan-validation-layers
 spirv-tools
@@ -230,22 +230,17 @@ glfw-x11
 libusb
 hidapi
 libevdev
-libudev0-shim
 libfmt
 rapidjson
-mbedtls2
-cubeb
-discord-rpc
-cpp-httplib
+mbedtls
 enet
-libressl
 libzip
 lz4
 zstd
 xbyak
 
-# Audio/Video Codecs for Switch
-ffmpeg4.4
+# Audio/Video Codecs for Handheld Console Games
+ffmpeg
 opus
 vorbis-tools
 libvorbis
@@ -258,12 +253,8 @@ gnutls
 
 # Gaming Optimizations (HoloISO-inspired)
 gamemode
-lib32-gamemode
 mangohud
-lib32-mangohud
-steam-native-runtime
 gamescope
-performance-tweaks
 
 # Controller Support
 libevdev
@@ -275,4 +266,4 @@ antimicrox
 fuse2
 fuse3
 ntfs-3g
-exfat-utils
+exfatprogs
