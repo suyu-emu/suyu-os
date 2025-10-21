@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+
+# suyuOS Emulator Build Script
+# This script builds Suyu and Eden emulators during ISO creation
+
+set -e
+
+BUILD_DIR="/tmp/emulator-build"
+INSTALL_PREFIX="/usr/local"
+SUYU_REPO="https://git.suyu.dev/suyu/suyu.git"
+EDEN_REPO="https://git.eden-emu.dev/eden-emu/eden.git"
+
+echo "Starting suyuOS emulator build process..."
+
+# Create build directory
+mkdir -p "$BUILD_DIR"
+cd "$BUILD_DIR"
+
+# Function to build Suyu emulator
+build_suyu() {
+    echo "Building Suyu emulator..."
+    
+    if [ ! -d "suyu" ]; then
+        git clone --recursive "$SUYU_REPO" suyu
+    fi
+    
+    cd suyu
+    
+    # Create build directory
+    mkdir -p build
+    cd build
+    
+    # Configure with CMake
+    cmake .. \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" \
+        -DENABLE_QT_TRANSLATION=ON \
+        -DENABLE_SDL2=ON \
+        -DENABLE_VULKAN=ON \
+        -DYUZU_USE_BUNDLED_VCPKG=OFF \
+        -DYUZU_USE_BUNDLED_FFMPEG=OFF \
+        -DYUZU_ENABLE_LTO=ON
+    
+    # Build
+    make -j$(nproc)
+    
+    # Install
+    make install
+    
+    cd "$BUILD_DIR"
+    echo "Suyu build completed successfully!"
+}
+
+# Function to build Eden emulator
+build_eden() {
+    echo "Building Eden emulator..."
+    
+    if [ ! -d "eden" ]; then
+        git clone --recursive "$EDEN_REPO" eden
+    fi
+    
+    cd eden
+    
+    # Create build directory
+    mkdir -p build
+    cd build
+    
+    # Configure with CMake
+    cmake .. \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" \
+        -DENABLE_QT_TRANSLATION=ON \
+        -DENABLE_SDL2=ON \
+        -DENABLE_VULKAN=ON \
+        -DEDEN_USE_BUNDLED_VCPKG=OFF \
+        -DEDEN_USE_BUNDLED_FFMPEG=OFF \
+        -DEDEN_ENABLE_LTO=ON
+    
+    # Build
+    make -j$(nproc)
+    
+    # Install
+    make install
+    
+    cd "$BUILD_DIR"
+    echo "Eden build completed successfully!"
+}
+
+# Function to setup emulator configurations
+setup_configs() {
+    echo "Setting up emulator configurations..."
+    
+    # Create config directories
+    mkdir -p /etc/skel/.config/suyu
+    mkdir -p /etc/skel/.config/eden
+    mkdir -p /etc/skel/.local/share/suyu
+    mkdir -p /etc/skel/.local/share/eden
+    
+    # Create basic configuration files
+    cat > /etc/skel/.config/suyu/qt-config.ini << 'EOF'
+[Core]
+use_multi_core=true
+use_extended_memory_layout=true
+
+[Renderer]
+backend=1
+vulkan_device=0
+use_asynchronous_gpu_emulation=true
+use_fast_gpu_time=true
+
+[Audio]
+output_engine=auto
+volume=1.0
+
+[Controls]
+keyboard_enabled=true
+mouse_enabled=true
+EOF
+
+    cat > /etc/skel/.config/eden/qt-config.ini << 'EOF'
+[Core]
+use_multi_core=true
+use_extended_memory_layout=true
+
+[Renderer]
+backend=1
+vulkan_device=0
+use_asynchronous_gpu_emulation=true
+use_fast_gpu_time=true
+
+[Audio]
+output_engine=auto
+volume=1.0
+
+[Controls]
+keyboard_enabled=true
+mouse_enabled=true
+EOF
+
+    echo "Configuration setup completed!"
+}
+
+# Main build process
+main() {
+    echo "suyuOS Emulator Build Script v1.0"
+    echo "=================================="
+    
+    # Check if running as root (required for installation)
+    if [ "$EUID" -ne 0 ]; then
+        echo "This script must be run as root during ISO build process"
+        exit 1
+    fi
+    
+    # Build emulators
+    build_suyu
+    build_eden
+    
+    # Setup configurations
+    setup_configs
+    
+    # Cleanup build directory
+    rm -rf "$BUILD_DIR"
+    
+    echo "All emulators built and installed successfully!"
+    echo "Suyu and Eden are now available in $INSTALL_PREFIX/bin/"
+}
+
+# Run main function if script is executed directly
+if [ "${BASH_SOURCE[0]}" == "${0}" ]; then
+    main "$@"
+fi

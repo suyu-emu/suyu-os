@@ -1,0 +1,306 @@
+#!/usr/bin/env bash
+
+# suyuOS Gaming Launcher
+# Unified launcher for Switch games with automatic emulator selection
+
+set -e
+
+SUYU_BIN="/usr/local/bin/suyu"
+EDEN_BIN="/usr/local/bin/eden"
+GAMES_DIR="$HOME/Games"
+CONFIG_DIR="$HOME/.config/suyuos"
+LAUNCHER_CONFIG="$CONFIG_DIR/launcher.conf"
+
+# Create necessary directories
+mkdir -p "$GAMES_DIR"
+mkdir -p "$CONFIG_DIR"
+
+# Default configuration
+create_default_config() {
+    cat > "$LAUNCHER_CONFIG" << 'EOF'
+# suyuOS Launcher Configuration
+DEFAULT_EMULATOR=suyu
+ENABLE_GAMEMODE=true
+ENABLE_MANGOHUD=false
+FULLSCREEN_DEFAULT=true
+VSYNC_DEFAULT=true
+PERFORMANCE_MODE=balanced
+EOF
+}
+
+# Load configuration
+load_config() {
+    if [ ! -f "$LAUNCHER_CONFIG" ]; then
+        create_default_config
+    fi
+    source "$LAUNCHER_CONFIG"
+}
+
+# Detect game type and select appropriate emulator
+detect_emulator() {
+    local game_file="$1"
+    local extension="${game_file##*.}"
+    
+    case "${extension,,}" in
+        nsp|xci|nca|nro|nso)
+            if [ -x "$EDEN_BIN" ] && [ "$DEFAULT_EMULATOR" = "eden" ]; then
+                echo "$EDEN_BIN"
+            elif [ -x "$SUYU_BIN" ]; then
+                echo "$SUYU_BIN"
+            else
+                echo "ERROR: No compatible emulator found"
+                return 1
+            fi
+            ;;
+        *)
+            echo "ERROR: Unsupported file format: $extension"
+            return 1
+            ;;
+    esac
+}
+
+# Apply performance optimizations
+setup_performance() {
+    # Set CPU governor to performance mode
+    if [ "$PERFORMANCE_MODE" = "performance" ]; then
+        echo "Setting CPU governor to performance mode..."
+        echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null 2>&1 || true
+    fi
+    
+    # Set GPU performance mode (NVIDIA)
+    if command -v nvidia-smi > /dev/null 2>&1; then
+        nvidia-smi -pm 1 > /dev/null 2>&1 || true
+        nvidia-smi -ac 4004,1911 > /dev/null 2>&1 || true
+    fi
+    
+    # Disable desktop compositing for better performance
+    if command -v kwriteconfig5 > /dev/null 2>&1; then
+        kwriteconfig5 --file kwinrc --group Compositing --key Enabled false
+        qdbus org.kde.KWin /Compositor suspend
+    fi
+}
+
+# Restore normal performance settings
+restore_performance() {
+    # Restore CPU governor
+    if [ "$PERFORMANCE_MODE" = "performance" ]; then
+        echo "Restoring CPU governor..."
+        echo ondemand | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null 2>&1 || true
+    fi
+    
+    # Re-enable desktop compositing
+    if command -v kwriteconfig5 > /dev/null 2>&1; then
+        kwriteconfig5 --file kwinrc --group Compositing --key Enabled true
+        qdbus org.kde.KWin /Compositor resume
+    fi
+}
+
+# Launch game with selected emulator
+launch_game() {
+    local game_file="$1"
+    local emulator_bin
+    local launch_cmd=""
+    
+    # Detect appropriate emulator
+    emulator_bin=$(detect_emulator "$game_file")
+    if [ $? -ne 0 ]; then
+        echo "$emulator_bin"
+        return 1
+    fi
+    
+    echo "Launching $(basename "$game_file") with $(basename "$emulator_bin")..."
+    
+    # Build launch command
+    if [ "$ENABLE_GAMEMODE" = "true" ] && command -v gamemoderun > /dev/null 2>&1; then
+        launch_cmd="gamemoderun"
+    fi
+    
+    if [ "$ENABLE_MANGOHUD" = "true" ] && command -v mangohud > /dev/null 2>&1; then
+        launch_cmd="$launch_cmd mangohud"
+    fi
+    
+    launch_cmd="$launch_cmd $emulator_bin"
+    
+    # Add emulator-specific arguments
+    if [ "$FULLSCREEN_DEFAULT" = "true" ]; then
+        launch_cmd="$launch_cmd -f"
+    fi
+    
+    # Add game file
+    launch_cmd="$launch_cmd \"$game_file\""
+    
+    # Setup performance optimizations
+    setup_performance
+    
+    # Launch the game
+    echo "Executing: $launch_cmd"
+    eval $launch_cmd
+    
+    # Restore performance settings
+    restore_performance
+}
+
+# Show game library
+show_library() {
+    echo "suyuOS Game Library"
+    echo "==================="
+    echo
+    
+    if [ ! -d "$GAMES_DIR" ] || [ -z "$(ls -A "$GAMES_DIR" 2>/dev/null)" ]; then
+        echo "No games found in $GAMES_DIR"
+        echo "Place your Switch game files (.nsp, .xci, .nca, .nro, .nso) in this directory."
+        return
+    fi
+    
+    local count=0
+    for game in "$GAMES_DIR"/*; do
+        if [ -f "$game" ]; then
+            case "${game##*.}" in
+                nsp|xci|nca|nro|nso)
+                    count=$((count + 1))
+                    echo "$count. $(basename "$game")"
+                    ;;
+            esac
+        fi
+    done
+    
+    if [ $count -eq 0 ]; then
+        echo "No compatible game files found."
+    fi
+}
+
+# Interactive game selection
+select_game() {
+    show_library
+    echo
+    echo "Enter the number of the game to launch, or 'q' to quit:"
+    read -r selection
+    
+    if [ "$selection" = "q" ]; then
+        exit 0
+    fi
+    
+    if ! [[ "$selection" =~ ^[0-9]+$ ]]; then
+        echo "Invalid selection. Please enter a number."
+        return 1
+    fi
+    
+    local count=0
+    for game in "$GAMES_DIR"/*; do
+        if [ -f "$game" ]; then
+            case "${game##*.}" in
+                nsp|xci|nca|nro|nso)
+                    count=$((count + 1))
+                    if [ $count -eq $selection ]; then
+                        launch_game "$game"
+                        return
+                    fi
+                    ;;
+            esac
+        fi
+    done
+    
+    echo "Invalid selection: $selection"
+    return 1
+}
+
+# Show help
+show_help() {
+    cat << 'EOF'
+suyuOS Gaming Launcher v1.0
+
+Usage: suyuos-launcher [OPTIONS] [GAME_FILE]
+
+Options:
+  -h, --help          Show this help message
+  -l, --library       Show game library
+  -c, --config        Edit launcher configuration
+  -e, --emulator EMU  Set default emulator (suyu|eden)
+  --gamemode          Enable/disable GameMode
+  --mangohud          Enable/disable MangoHUD
+  --performance MODE  Set performance mode (balanced|performance|powersave)
+
+Examples:
+  suyuos-launcher                           # Interactive game selection
+  suyuos-launcher game.nsp                  # Launch specific game
+  suyuos-launcher -l                        # Show game library
+  suyuos-launcher -e eden                   # Set Eden as default emulator
+
+Game files should be placed in: ~/Games/
+Supported formats: .nsp, .xci, .nca, .nro, .nso
+EOF
+}
+
+# Edit configuration
+edit_config() {
+    if command -v kate > /dev/null 2>&1; then
+        kate "$LAUNCHER_CONFIG"
+    elif command -v gedit > /dev/null 2>&1; then
+        gedit "$LAUNCHER_CONFIG"
+    elif command -v nano > /dev/null 2>&1; then
+        nano "$LAUNCHER_CONFIG"
+    else
+        echo "No suitable text editor found. Please edit $LAUNCHER_CONFIG manually."
+    fi
+}
+
+# Main function
+main() {
+    load_config
+    
+    case "${1:-}" in
+        -h|--help)
+            show_help
+            ;;
+        -l|--library)
+            show_library
+            ;;
+        -c|--config)
+            edit_config
+            ;;
+        -e|--emulator)
+            if [ -z "$2" ]; then
+                echo "Error: Emulator name required"
+                exit 1
+            fi
+            sed -i "s/DEFAULT_EMULATOR=.*/DEFAULT_EMULATOR=$2/" "$LAUNCHER_CONFIG"
+            echo "Default emulator set to: $2"
+            ;;
+        --gamemode)
+            current=$(grep "ENABLE_GAMEMODE=" "$LAUNCHER_CONFIG" | cut -d= -f2)
+            new_value=$([ "$current" = "true" ] && echo "false" || echo "true")
+            sed -i "s/ENABLE_GAMEMODE=.*/ENABLE_GAMEMODE=$new_value/" "$LAUNCHER_CONFIG"
+            echo "GameMode: $new_value"
+            ;;
+        --mangohud)
+            current=$(grep "ENABLE_MANGOHUD=" "$LAUNCHER_CONFIG" | cut -d= -f2)
+            new_value=$([ "$current" = "true" ] && echo "false" || echo "true")
+            sed -i "s/ENABLE_MANGOHUD=.*/ENABLE_MANGOHUD=$new_value/" "$LAUNCHER_CONFIG"
+            echo "MangoHUD: $new_value"
+            ;;
+        --performance)
+            if [ -z "$2" ]; then
+                echo "Error: Performance mode required (balanced|performance|powersave)"
+                exit 1
+            fi
+            sed -i "s/PERFORMANCE_MODE=.*/PERFORMANCE_MODE=$2/" "$LAUNCHER_CONFIG"
+            echo "Performance mode set to: $2"
+            ;;
+        "")
+            # Interactive mode
+            select_game
+            ;;
+        *)
+            # Launch specific game file
+            if [ -f "$1" ]; then
+                launch_game "$1"
+            else
+                echo "Error: File not found: $1"
+                exit 1
+            fi
+            ;;
+    esac
+}
+
+# Run main function
+main "$@"
