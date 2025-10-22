@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+
+# suyuOS Gaming Restoration Script
+# Restores normal system settings when gaming optimizations are no longer needed
+
+set -e
+
+echo "Restoring normal system settings..."
+
+# CPU optimizations restoration
+echo "Restoring CPU settings..."
+
+# Restore CPU governor to ondemand
+echo ondemand > /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 2>/dev/null || true
+
+# Re-enable CPU idle states
+echo 0 > /sys/devices/system/cpu/cpu*/cpuidle/state*/disable 2>/dev/null || true
+
+# Restore default CPU scheduler settings
+echo 6000000 > /proc/sys/kernel/sched_latency_ns 2>/dev/null || true
+echo 750000 > /proc/sys/kernel/sched_min_granularity_ns 2>/dev/null || true
+echo 1000000 > /proc/sys/kernel/sched_wakeup_granularity_ns 2>/dev/null || true
+
+# Memory optimizations restoration
+echo "Restoring memory settings..."
+
+# Restore default swappiness
+echo 60 > /proc/sys/vm/swappiness
+
+# Restore default dirty page settings
+echo 10 > /proc/sys/vm/dirty_background_ratio
+echo 20 > /proc/sys/vm/dirty_ratio
+
+# GPU optimizations restoration
+echo "Restoring GPU settings..."
+
+# NVIDIA optimizations restoration
+if command -v nvidia-smi > /dev/null 2>&1; then
+    # Disable persistence mode
+    nvidia-smi -pm 0 2>/dev/null || true
+    
+    # Reset to default clocks
+    nvidia-smi -rac 2>/dev/null || true
+fi
+
+# AMD GPU optimizations restoration
+if [ -d "/sys/class/drm/card0/device" ]; then
+    # Set auto performance profile
+    echo auto > /sys/class/drm/card0/device/power_dpm_force_performance_level 2>/dev/null || true
+fi
+
+# Restore transparent huge pages
+echo "Restoring kernel settings..."
+echo madvise > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
+echo madvise > /sys/kernel/mm/transparent_hugepage/defrag 2>/dev/null || true
+
+# Restore process priorities
+echo "Restoring process priorities..."
+
+# Reset audio process priorities
+pgrep -f "pulseaudio|pipewire" | xargs -I {} renice 0 {} 2>/dev/null || true
+
+# Reset gaming process priorities
+pgrep -f "suyu|eden" | xargs -I {} chrt -o -p 0 {} 2>/dev/null || true
+
+echo "System settings restored to normal!"
+
+# Log restoration status
+echo "$(date): Gaming optimizations restored" >> /var/log/suyuos-gaming.log
