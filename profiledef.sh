@@ -1,16 +1,14 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2034
 
-iso_name="archlinux"
-iso_label="ARCH_$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y%m)"
-iso_publisher="Arch Linux <https://archlinux.org>"
-iso_application="Arch Linux Live/Rescue DVD"
+iso_name="suyuos"
+iso_label="SUYUOS_$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y%m)"
+iso_publisher="suyuOS Project <https://suyu.dev>"
+iso_application="suyuOS - Handheld Console Gaming OS"
 iso_version="$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y.%m.%d)"
-install_dir="arch"
+install_dir="suyuos"
 buildmodes=('iso')
-bootmodes=('bios.syslinux.mbr' 'bios.syslinux.eltorito'
-           'uefi-ia32.grub.esp' 'uefi-x64.grub.esp'
-           'uefi-ia32.grub.eltorito' 'uefi-x64.grub.eltorito')
+bootmodes=('bios.syslinux' 'uefi.grub')
 arch="x86_64"
 pacman_conf="pacman.conf"
 airootfs_image_type="squashfs"
@@ -24,6 +22,11 @@ file_permissions=(
   ["/usr/local/bin/choose-mirror"]="0:0:755"
   ["/usr/local/bin/Installation_guide"]="0:0:755"
   ["/usr/local/bin/livecd-sound"]="0:0:755"
+  ["/usr/local/bin/build-emulators"]="0:0:755"
+  ["/usr/local/bin/suyuos-launcher"]="0:0:755"
+  ["/usr/local/bin/suyuos-optimize"]="0:0:755"
+  ["/usr/local/bin/suyuos-restore"]="0:0:755"
+  ["/usr/local/bin/suyuos-setup"]="0:0:755"
   ["/etc/shadow"]="0:0:0400"
   ["/etc/gshadow"]="0:0:0400"
 )

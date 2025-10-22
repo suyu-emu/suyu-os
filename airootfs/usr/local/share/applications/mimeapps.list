@@ -1,0 +1,13 @@
+[Default Applications]
+application/x-nintendo-nsp=suyuos-launcher.desktop;suyu-emulator.desktop;eden-emulator.desktop
+application/x-nintendo-xci=suyuos-launcher.desktop;suyu-emulator.desktop;eden-emulator.desktop
+application/x-nintendo-nca=suyuos-launcher.desktop;suyu-emulator.desktop;eden-emulator.desktop
+application/x-nintendo-nro=suyuos-launcher.desktop;suyu-emulator.desktop;eden-emulator.desktop
+application/x-nintendo-nso=suyuos-launcher.desktop;suyu-emulator.desktop;eden-emulator.desktop
+
+[Added Associations]
+application/x-nintendo-nsp=suyuos-launcher.desktop;suyu-emulator.desktop;eden-emulator.desktop
+application/x-nintendo-xci=suyuos-launcher.desktop;suyu-emulator.desktop;eden-emulator.desktop
+application/x-nintendo-nca=suyuos-launcher.desktop;suyu-emulator.desktop;eden-emulator.desktop
+application/x-nintendo-nro=suyuos-launcher.desktop;suyu-emulator.desktop;eden-emulator.desktop
+application/x-nintendo-nso=suyuos-launcher.desktop;suyu-emulator.desktop;eden-emulator.desktop

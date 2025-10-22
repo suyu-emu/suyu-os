@@ -1,0 +1,66 @@
+#!/usr/bin/bash
+
+# suyuOS Gaming Install Hook for mkinitcpio
+# Build-time hook for integrating gaming optimizations
+
+build() {
+    # Add gaming-related kernel modules
+    local gaming_modules=(
+        'switch_hid'
+        'switch_audio'
+        'switch_gpu'
+        'uinput'
+        'joydev'
+        'evdev'
+        'hid_nintendo'
+        'hid_sony'
+        'hid_microsoft'
+        'xpad'
+        'snd_hda_intel'
+        'snd_usb_audio'
+    )
+    
+    for module in "${gaming_modules[@]}"; do
+        add_module "$module"
+    done
+    
+    # Add gaming optimization binaries
+    add_binary /usr/local/bin/suyuos-optimize
+    add_binary /usr/local/bin/suyuos-restore
+    
+    # Add essential gaming utilities
+    add_binary /usr/bin/gamemoderun
+    add_binary /usr/bin/mangohud
+    
+    # Add controller configuration utilities
+    add_binary /usr/bin/jstest
+    add_binary /usr/bin/evtest
+    
+    # Add udev rules for gaming hardware
+    add_udev_rule '99-nintendo-switch-controllers.conf'
+    add_udev_rule '99-gaming-controllers.conf'
+    
+    # Add gaming configuration files
+    add_file /etc/modprobe.d/suyuos-gaming.conf
+    add_file /etc/sysctl.d/99-suyuos-gaming.conf
+    
+    # Add the runtime hook
+    add_runscript
+}
+
+help() {
+    cat << HELPEOF
+This is the build-time install hook for suyuOS gaming optimizations.
+It includes all necessary modules, binaries, and configuration files
+for Nintendo Switch emulation and gaming performance optimization.
+
+This hook integrates:
+- Horinux kernel patches for Switch hardware emulation
+- Gaming controller support (Nintendo, Sony, Microsoft)
+- Audio/video optimization modules
+- Gaming performance utilities (GameMode, MangoHUD)
+- System optimization configuration files
+
+Add 'suyuos-gaming' to the HOOKS array in /etc/mkinitcpio.conf
+HELPEOF
+}

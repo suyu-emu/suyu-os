@@ -1,0 +1,267 @@
+name: Build suyuOS ISO
+
+on:
+  push:
+    branches: [ main, master, dev ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+        - release
+        - debug
+        - testing
+
+env:
+  BUILD_TYPE: ${{ github.event.inputs.build_type || 'release' }}
+
+jobs:
+  build-iso:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      options: --privileged
+    
+    steps:
+    - name: Install Git and base tools
+      run: |
+        # Update system and install Git first (required for checkout)
+        pacman -Syu --noconfirm
+        pacman -S --noconfirm git
+
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        submodules: recursive
+
+    - name: Setup Arch Linux environment
+      run: |
+        # Install base packages
+        pacman -S --noconfirm base-devel archiso squashfs-tools
+        
+        # Install grub (required for UEFI boot support validation)
+        pacman -S --noconfirm grub
+        
+        # Install build dependencies
+        pacman -S --noconfirm cmake ninja gcc clang llvm
+        pacman -S --noconfirm qt5-base qt5-tools qt5-multimedia qt5-webengine
+        pacman -S --noconfirm vulkan-headers vulkan-validation-layers
+        pacman -S --noconfirm ffmpeg opus libzip zstd lz4 mbedtls
+        pacman -S --noconfirm boost catch2 fmt glslang nlohmann-json
+        pacman -S --noconfirm libusb hidapi libevdev
+        
+        # Install additional gaming dependencies
+        pacman -S --noconfirm gamemode mangohud gamescope
+        
+        # Create build user (archiso requires non-root user for some operations)
+        useradd -m -G wheel -s /bin/bash builder
+        echo 'builder ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
+
+    - name: Validate package list
+      run: |
+        echo "Validating packages in packages.x86_64..."
+        while IFS= read -r package; do
+          # Skip empty lines and comments
+          [[ -z "$package" || "$package" =~ ^[[:space:]]*# ]] && continue
+          
+          # Check if package exists in repositories
+          if ! pacman -Si "$package" >/dev/null 2>&1; then
+            echo "WARNING: Package '$package' not found in repositories"
+            # Try to find similar packages
+            pacman -Ss "$package" | head -5 || true
+          else
+            echo "✓ Package '$package' found"
+          fi
+        done < packages.x86_64
+
+    - name: Clone emulator repositories
+      run: |
+        mkdir -p /tmp/emulator-sources
+        cd /tmp/emulator-sources
+        
+        echo "Cloning suyu repository..."
+        git clone --recursive --depth 1 https://git.suyu.dev/suyu/suyu.git || \
+        git clone --recursive --depth 1 https://github.com/suyu-emu/suyu.git || \
+        echo "Failed to clone suyu repository"
+        
+        echo "Cloning eden repository..."
+        git clone --recursive --depth 1 https://git.eden-emu.dev/eden-emu/eden.git || \
+        echo "Failed to clone eden repository"
+        
+        echo "Cloning horinux repository..."
+        git clone --depth 1 https://github.com/suyu-emu/horinux.git || \
+        echo "Failed to clone horinux repository"
+        
+        echo "Cloning holoiso repository..."
+        git clone --depth 1 https://github.com/holoiso-eol/holoiso.git || \
+        echo "Failed to clone holoiso repository"
+        
+        # List what we successfully cloned
+        ls -la /tmp/emulator-sources/
+
+    - name: Pre-build emulators
+      run: |
+        cd /tmp/emulator-sources
+        
+        # Build suyu if available
+        if [ -d "suyu" ]; then
+          echo "Pre-building suyu emulator..."
+          cd suyu
+          mkdir -p build && cd build
+          
+          cmake .. \
+            -GNinja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr/local \
+            -DENABLE_QT_TRANSLATION=ON \
+            -DENABLE_SDL2=ON \
+            -DENABLE_VULKAN=ON \
+            -DYUZU_USE_BUNDLED_VCPKG=OFF \
+            -DYUZU_USE_BUNDLED_FFMPEG=OFF \
+            -DYUZU_ENABLE_LTO=ON \
+            -DYUZU_CRASH_DUMPS=OFF \
+            -DYUZU_USE_PRECOMPILED_HEADERS=OFF || true
+          
+          ninja -j$(nproc) || echo "Suyu build failed, will use fallback"
+          cd /tmp/emulator-sources
+        fi
+        
+        # Build eden if available
+        if [ -d "eden" ]; then
+          echo "Pre-building eden emulator..."
+          cd eden
+          mkdir -p build && cd build
+          
+          cmake .. \
+            -GNinja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr/local \
+            -DENABLE_QT_TRANSLATION=ON \
+            -DENABLE_SDL2=ON \
+            -DENABLE_VULKAN=ON || true
+          
+          ninja -j$(nproc) || echo "Eden build failed, will use fallback"
+          cd /tmp/emulator-sources
+        fi
+
+    - name: Prepare ISO build environment
+      run: |
+        # Copy emulator sources to airootfs for build during ISO creation
+        mkdir -p airootfs/tmp/emulator-sources
+        cp -r /tmp/emulator-sources/* airootfs/tmp/emulator-sources/ 2>/dev/null || true
+        
+        # Ensure build script is executable
+        chmod +x airootfs/usr/local/bin/build-emulators
+        chmod +x airootfs/usr/local/bin/suyuos-*
+        
+        # Create build directory
+        mkdir -p build-iso
+        mkdir -p /tmp/suyuos-build
+
+    - name: Build suyuOS ISO
+      run: |
+        # Fix the build command from BUILDING.md
+        mkarchiso -v -w '/tmp/suyuos-build' -o 'build-iso' .
+      
+    - name: Verify ISO build
+      run: |
+        if [ -f build-iso/*.iso ]; then
+          echo "✓ ISO build successful!"
+          ls -lh build-iso/*.iso
+          
+          # Get ISO info
+          file build-iso/*.iso
+          
+          # Calculate checksums
+          cd build-iso
+          sha256sum *.iso > SHA256SUMS
+          md5sum *.iso > MD5SUMS
+          
+          echo "Build artifacts:"
+          ls -la
+        else
+          echo "✗ ISO build failed!"
+          exit 1
+        fi
+
+    - name: Upload ISO artifact
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: suyuos-iso-${{ env.BUILD_TYPE }}-${{ github.sha }}
+        path: |
+          build-iso/*.iso
+          build-iso/SHA256SUMS
+          build-iso/MD5SUMS
+        retention-days: 30
+
+    - name: Upload build logs
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: build-logs-${{ github.sha }}
+        path: |
+          /tmp/suyuos-build/work/*/build.log
+          /tmp/suyuos-build/work/*/airootfs.log
+        retention-days: 7
+
+  create-release:
+    needs: build-iso
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Download ISO artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: suyuos-iso-${{ env.BUILD_TYPE }}-${{ github.sha }}
+        path: ./release-files
+        
+    - name: Create release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ github.run_number }}
+        name: suyuOS Release v${{ github.run_number }}
+        body: |
+          ## suyuOS Release v${{ github.run_number }}
+          
+          **Build Information:**
+          - Commit: ${{ github.sha }}
+          - Build Type: ${{ env.BUILD_TYPE }}
+          - Build Date: ${{ github.event.head_commit.timestamp }}
+          
+          **Features:**
+          - Handheld console game emulation support
+          - Gaming optimizations (GameMode, MangoHUD, Gamescope)
+          - Vulkan graphics acceleration
+          - Controller support
+          - Performance tuning utilities
+          
+          **Installation:**
+          1. Download the ISO file
+          2. Create a bootable USB drive using tools like Rufus or dd
+          3. Boot from the USB drive
+          4. Follow the installation wizard
+          
+          **Legal Notice:**
+          This software is for educational and research purposes. Users are responsible for ensuring they own legal copies of any games they use with this system.
+          
+          **Checksums:**
+          See SHA256SUMS and MD5SUMS files for verification.
+        files: |
+          ./release-files/*.iso
+          ./release-files/SHA256SUMS
+          ./release-files/MD5SUMS
+        draft: false
+        prerelease: ${{ env.BUILD_TYPE != 'release' }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
