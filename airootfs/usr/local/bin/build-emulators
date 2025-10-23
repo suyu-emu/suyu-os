@@ -3,6 +3,7 @@
 # suyuOS Emulator Build Script
 # This script builds Suyu and Eden emulators during ISO creation
 # Also integrates horinux kernel patches and holoiso optimizations
+# Updated for optimized CI/CD disk space usage
 
 set -e
 
@@ -10,51 +11,28 @@ BUILD_DIR="/tmp/emulator-build"
 INSTALL_PREFIX="/usr/local"
 SOURCE_DIR="/tmp/emulator-sources"
 
-# Repository URLs with fallbacks
-SUYU_REPOS=(
-    "https://git.suyu.dev/suyu/suyu.git"
-    "https://github.com/suyu-emu/suyu.git"
-)
-
-EDEN_REPOS=(
-    "https://git.eden-emu.dev/eden-emu/eden.git"
-)
-
-HORINUX_REPOS=(
-    "https://github.com/suyu-emu/horinux.git"
-)
-
-HOLOISO_REPOS=(
-    "https://github.com/holoiso-eol/holoiso.git"
-)
-
 echo "Starting suyuOS emulator build process..."
 
-# Create build directory
-mkdir -p "$BUILD_DIR"
-mkdir -p "$SOURCE_DIR"
-cd "$BUILD_DIR"
+# Function to check available disk space
+check_disk_space() {
+    local available=$(df / | awk 'NR==2 {print $4}')
+    local available_gb=$((available / 1024 / 1024))
+    echo "Available disk space: ${available_gb}GB"
+    
+    if [ "$available_gb" -lt 2 ]; then
+        echo "Warning: Low disk space (${available_gb}GB). Build may fail."
+        return 1
+    fi
+    return 0
+}
 
-# Function to clone repository with fallbacks
-clone_repo() {
-    local name="$1"
-    shift
-    local repos=("$@")
-    
-    echo "Cloning $name repository..."
-    
-    for repo in "${repos[@]}"; do
-        echo "Trying $repo..."
-        if git clone --recursive --depth 1 "$repo" "$SOURCE_DIR/$name" 2>/dev/null; then
-            echo "Successfully cloned $name from $repo"
-            return 0
-        else
-            echo "Failed to clone from $repo"
-        fi
-    done
-    
-    echo "Warning: Could not clone $name from any repository"
-    return 1
+# Function to cleanup build artifacts
+cleanup_build_artifacts() {
+    echo "Cleaning up build artifacts to save space..."
+    rm -rf "$BUILD_DIR" 2>/dev/null || true
+    rm -rf /tmp/suyu-build 2>/dev/null || true
+    rm -rf /tmp/eden-build 2>/dev/null || true
+    echo "Build artifacts cleaned up"
 }
 
 # Function to apply horinux kernel patches
@@ -149,109 +127,70 @@ integrate_holoiso_optimizations() {
     fi
 }
 
-# Function to build Suyu emulator
-build_suyu() {
-    echo "Building Suyu emulator..."
+# Function to build emulators using prepared build scripts
+build_emulators_from_scripts() {
+    echo "Building emulators using prepared build scripts..."
     
-    if [ -d "$SOURCE_DIR/suyu" ]; then
-        cd "$SOURCE_DIR/suyu"
+    # Check if we have build scripts from the CI preparation
+    if [ -f "$SOURCE_DIR/build_suyu.sh" ]; then
+        echo "Found suyu build script, executing..."
+        check_disk_space || echo "Proceeding with low disk space warning"
         
-        # Create build directory
-        mkdir -p build
-        cd build
+        cd "$SOURCE_DIR"
+        bash build_suyu.sh || {
+            echo "Suyu build script failed, creating placeholder"
+            create_suyu_placeholder
+        }
         
-        # Configure with CMake - updated for latest suyu
-        cmake .. \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" \
-            -DENABLE_QT_TRANSLATION=ON \
-            -DENABLE_SDL2=ON \
-            -DENABLE_VULKAN=ON \
-            -DSUYU_USE_BUNDLED_VCPKG=OFF \
-            -DSUYU_USE_BUNDLED_FFMPEG=OFF \
-            -DSUYU_ENABLE_LTO=ON \
-            -DSUYU_CRASH_DUMPS=OFF \
-            -DSUYU_USE_PRECOMPILED_HEADERS=OFF \
-            -DSUYU_ROOM=OFF \
-            -DSUYU_TESTS=OFF
-        
-        # Build with available cores
-        make -j$(nproc) || ninja -j$(nproc) || echo "Build failed, trying single-threaded..."
-        make || ninja || echo "Single-threaded build also failed"
-        
-        # Install if build succeeded
-        if [ -f "bin/suyu" ] || [ -f "src/suyu/suyu" ]; then
-            make install || ninja install
-            echo "Suyu installed successfully!"
-        else
-            echo "Suyu build failed, creating placeholder"
-            mkdir -p "$INSTALL_PREFIX/bin"
-            cat > "$INSTALL_PREFIX/bin/suyu" << 'EOF'
-#!/bin/bash
-echo "Suyu emulator is not available in this build."
-echo "Please check the build logs for compilation errors."
-exit 1
-EOF
-            chmod +x "$INSTALL_PREFIX/bin/suyu"
-        fi
-        
-        cd "$BUILD_DIR"
+        cleanup_build_artifacts
     else
-        echo "Suyu source not available, skipping build"
+        echo "No suyu build script found, creating placeholder"
+        create_suyu_placeholder
     fi
-    echo "Suyu build completed successfully!"
+    
+    if [ -f "$SOURCE_DIR/build_eden.sh" ]; then
+        echo "Found eden build script, executing..."
+        check_disk_space || echo "Proceeding with low disk space warning"
+        
+        cd "$SOURCE_DIR"
+        bash build_eden.sh || {
+            echo "Eden build script failed, creating placeholder"
+            create_eden_placeholder
+        }
+        
+        cleanup_build_artifacts
+    else
+        echo "No eden build script found, creating placeholder"
+        create_eden_placeholder
+    fi
 }
 
-# Function to build Eden emulator
-build_eden() {
-    echo "Building Eden emulator..."
-    
-    if [ -d "$SOURCE_DIR/eden" ]; then
-        cd "$SOURCE_DIR/eden"
-        
-        # Create build directory
-        mkdir -p build
-        cd build
-        
-        # Configure with CMake - adapted for Eden
-        cmake .. \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" \
-            -DENABLE_QT_TRANSLATION=ON \
-            -DENABLE_SDL2=ON \
-            -DENABLE_VULKAN=ON \
-            -DEDEN_USE_BUNDLED_VCPKG=OFF \
-            -DEDEN_USE_BUNDLED_FFMPEG=OFF \
-            -DEDEN_ENABLE_LTO=ON \
-            -DEDEN_CRASH_DUMPS=OFF \
-            -DEDEN_USE_PRECOMPILED_HEADERS=OFF \
-            -DEDEN_ROOM=OFF \
-            -DEDEN_TESTS=OFF
-        
-        # Build with available cores
-        make -j$(nproc) || ninja -j$(nproc) || echo "Build failed, trying single-threaded..."
-        make || ninja || echo "Single-threaded build also failed"
-        
-        # Install if build succeeded
-        if [ -f "bin/eden" ] || [ -f "src/eden/eden" ]; then
-            make install || ninja install
-            echo "Eden installed successfully!"
-        else
-            echo "Eden build failed, creating placeholder"
-            mkdir -p "$INSTALL_PREFIX/bin"
-            cat > "$INSTALL_PREFIX/bin/eden" << 'EOF'
+# Function to create suyu placeholder
+create_suyu_placeholder() {
+    echo "Creating suyu placeholder..."
+    mkdir -p "$INSTALL_PREFIX/bin"
+    cat > "$INSTALL_PREFIX/bin/suyu" << 'EOF'
 #!/bin/bash
-echo "Eden emulator is not available in this build."
-echo "Please check the build logs for compilation errors."
+echo "Suyu emulator is not available in this build."
+echo "This may be due to build constraints or missing dependencies."
+echo "You can try building it manually after installation."
 exit 1
 EOF
-            chmod +x "$INSTALL_PREFIX/bin/eden"
-        fi
-        
-        cd "$BUILD_DIR"
-    else
-        echo "Eden source not available, skipping build"
-    fi
+    chmod +x "$INSTALL_PREFIX/bin/suyu"
+}
+
+# Function to create eden placeholder
+create_eden_placeholder() {
+    echo "Creating eden placeholder..."
+    mkdir -p "$INSTALL_PREFIX/bin"
+    cat > "$INSTALL_PREFIX/bin/eden" << 'EOF'
+#!/bin/bash
+echo "Eden emulator is not available in this build."
+echo "This may be due to build constraints or missing dependencies."
+echo "You can try building it manually after installation."
+exit 1
+EOF
+    chmod +x "$INSTALL_PREFIX/bin/eden"
 }
 
 # Function to setup emulator configurations
@@ -310,8 +249,8 @@ EOF
 
 # Main build process
 main() {
-    echo "suyuOS Emulator Build Script v2.0"
-    echo "=================================="
+    echo "suyuOS Emulator Build Script v2.1 (Optimized)"
+    echo "=============================================="
     
     # Check if running as root (required for installation)
     if [ "$EUID" -ne 0 ]; then
@@ -319,39 +258,27 @@ main() {
         exit 1
     fi
     
-    # Clone repositories if sources are not already available
-    if [ ! -d "$SOURCE_DIR/suyu" ]; then
-        clone_repo "suyu" "${SUYU_REPOS[@]}" || echo "Failed to clone suyu"
-    fi
+    # Check initial disk space
+    check_disk_space || echo "Continuing with limited disk space"
     
-    if [ ! -d "$SOURCE_DIR/eden" ]; then
-        clone_repo "eden" "${EDEN_REPOS[@]}" || echo "Failed to clone eden"
-    fi
+    # Create build directory
+    mkdir -p "$BUILD_DIR"
     
-    if [ ! -d "$SOURCE_DIR/horinux" ]; then
-        clone_repo "horinux" "${HORINUX_REPOS[@]}" || echo "Failed to clone horinux"
-    fi
-    
-    if [ ! -d "$SOURCE_DIR/holoiso" ]; then
-        clone_repo "holoiso" "${HOLOISO_REPOS[@]}" || echo "Failed to clone holoiso"
-    fi
-    
-    # Apply kernel patches and optimizations
+    # Apply kernel patches and optimizations (lightweight operations)
     apply_horinux_patches
     integrate_holoiso_optimizations
     
-    # Build emulators
-    build_suyu
-    build_eden
+    # Build emulators using prepared scripts or create placeholders
+    build_emulators_from_scripts
     
     # Setup configurations
     setup_configs
     
-    # Cleanup build directory
-    rm -rf "$BUILD_DIR"
+    # Final cleanup
+    cleanup_build_artifacts
     
-    echo "All emulators built and installed successfully!"
-    echo "Suyu and Eden are now available in $INSTALL_PREFIX/bin/"
+    echo "Emulator build process completed!"
+    echo "Check /usr/local/bin/ for available emulators"
 }
 
 # Run main function if script is executed directly

@@ -28,11 +28,56 @@ jobs:
       options: --privileged
     
     steps:
+    - name: Check initial disk space and setup monitoring
+      run: |
+        # Function to display disk usage
+        show_disk_usage() {
+          echo "=== Disk Usage Report ==="
+          df -h /
+          echo "=== Largest directories in /tmp ==="
+          du -sh /tmp/* 2>/dev/null | sort -hr | head -10 || true
+          echo "=== Memory usage ==="
+          free -h
+          echo "========================="
+        }
+        
+        # Function to cleanup package cache
+        cleanup_pacman_cache() {
+          echo "Cleaning pacman cache..."
+          pacman -Scc --noconfirm || true
+          echo "Pacman cache cleaned"
+        }
+        
+        # Function to cleanup temporary files
+        cleanup_temp_files() {
+          echo "Cleaning temporary files..."
+          rm -rf /tmp/pacman-* /var/cache/pacman/pkg/* /tmp/tmp.* 2>/dev/null || true
+          echo "Temporary files cleaned"
+        }
+        
+        # Export functions for use in other steps
+        echo 'show_disk_usage() { echo "=== Disk Usage Report ==="; df -h /; echo "=== Largest directories in /tmp ==="; du -sh /tmp/* 2>/dev/null | sort -hr | head -10 || true; echo "=== Memory usage ==="; free -h; echo "========================="; }' >> ~/.bashrc
+        echo 'cleanup_pacman_cache() { echo "Cleaning pacman cache..."; pacman -Scc --noconfirm || true; echo "Pacman cache cleaned"; }' >> ~/.bashrc
+        echo 'cleanup_temp_files() { echo "Cleaning temporary files..."; rm -rf /tmp/pacman-* /var/cache/pacman/pkg/* /tmp/tmp.* 2>/dev/null || true; echo "Temporary files cleaned"; }' >> ~/.bashrc
+        
+        echo "Initial disk space:"
+        show_disk_usage
+
     - name: Install Git and base tools
       run: |
+        source ~/.bashrc
+        
         # Update system and install Git first (required for checkout)
+        echo "Updating system and installing Git..."
         pacman -Syu --noconfirm
         pacman -S --noconfirm git
+        
+        # Clean up after initial installation
+        cleanup_pacman_cache
+        cleanup_temp_files
+        
+        echo "After Git installation:"
+        show_disk_usage
 
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -42,22 +87,49 @@ jobs:
 
     - name: Setup Arch Linux environment
       run: |
-        # Install base packages
-        pacman -S --noconfirm base-devel archiso squashfs-tools
+        source ~/.bashrc
         
-        # Install grub (required for UEFI boot support validation)
-        pacman -S --noconfirm grub
+        echo "Installing essential build packages..."
+        # Install base packages in one operation to reduce overhead
+        pacman -S --noconfirm --needed \
+          base-devel archiso squashfs-tools grub \
+          cmake ninja gcc clang llvm
         
-        # Install build dependencies
-        pacman -S --noconfirm cmake ninja gcc clang llvm
-        pacman -S --noconfirm qt5-base qt5-tools qt5-multimedia qt5-webengine
-        pacman -S --noconfirm vulkan-headers vulkan-validation-layers
-        pacman -S --noconfirm ffmpeg opus libzip zstd lz4 mbedtls
-        pacman -S --noconfirm boost catch2 fmt glslang nlohmann-json
-        pacman -S --noconfirm libusb hidapi libevdev
+        # Clean up after essential packages
+        cleanup_pacman_cache
+        cleanup_temp_files
         
-        # Install additional gaming dependencies
-        pacman -S --noconfirm gamemode mangohud gamescope
+        echo "After essential packages:"
+        show_disk_usage
+        
+        echo "Installing development libraries..."
+        # Install development libraries
+        pacman -S --noconfirm --needed \
+          qt5-base qt5-tools qt5-multimedia \
+          vulkan-headers vulkan-validation-layers \
+          ffmpeg opus libzip zstd lz4 mbedtls \
+          boost catch2 fmt glslang nlohmann-json \
+          libusb hidapi libevdev
+        
+        # Clean up after development libraries
+        cleanup_pacman_cache
+        cleanup_temp_files
+        
+        echo "After development libraries:"
+        show_disk_usage
+        
+        # Only install gaming dependencies for release builds to save space
+        if [ "$BUILD_TYPE" = "release" ]; then
+          echo "Installing gaming dependencies (release build only)..."
+          pacman -S --noconfirm --needed gamemode mangohud gamescope
+          cleanup_pacman_cache
+          cleanup_temp_files
+        else
+          echo "Skipping gaming dependencies for $BUILD_TYPE build to save space"
+        fi
+        
+        echo "After all package installations:"
+        show_disk_usage
         
         # Create build user (archiso requires non-root user for some operations)
         useradd -m -G wheel -s /bin/bash builder
@@ -65,6 +137,8 @@ jobs:
 
     - name: Validate package list
       run: |
+        source ~/.bashrc
+        
         echo "Validating packages in packages.x86_64..."
         while IFS= read -r package; do
           # Skip empty lines and comments
@@ -79,98 +153,214 @@ jobs:
             echo "✓ Package '$package' found"
           fi
         done < packages.x86_64
+        
+        echo "After package validation:"
+        show_disk_usage
 
-    - name: Clone emulator repositories
+    - name: Prepare emulator sources (lightweight)
       run: |
+        source ~/.bashrc
+        
+        # Create a minimal emulator sources directory
         mkdir -p /tmp/emulator-sources
         cd /tmp/emulator-sources
         
-        echo "Cloning suyu repository..."
-        git clone --recursive --depth 1 https://git.suyu.dev/suyu/suyu.git || \
-        git clone --recursive --depth 1 https://github.com/suyu-emu/suyu.git || \
-        echo "Failed to clone suyu repository"
+        echo "Preparing lightweight emulator source references..."
         
-        echo "Cloning eden repository..."
-        git clone --recursive --depth 1 https://git.eden-emu.dev/eden-emu/eden.git || \
-        echo "Failed to clone eden repository"
+        # Instead of full clones, create source reference files and minimal clones
+        # This dramatically reduces disk usage while preserving build capability
         
-        echo "Cloning horinux repository..."
-        git clone --depth 1 https://github.com/suyu-emu/horinux.git || \
-        echo "Failed to clone horinux repository"
+        echo "Creating suyu source reference..."
+        mkdir -p suyu
+        echo "https://git.suyu.dev/suyu/suyu.git" > suyu/source_url.txt
+        echo "https://github.com/suyu-emu/suyu.git" > suyu/fallback_url.txt
         
-        echo "Cloning holoiso repository..."
-        git clone --depth 1 https://github.com/holoiso-eol/holoiso.git || \
-        echo "Failed to clone holoiso repository"
+        echo "Creating eden source reference..."
+        mkdir -p eden  
+        echo "https://git.eden-emu.dev/eden-emu/eden.git" > eden/source_url.txt
         
-        # List what we successfully cloned
+        echo "Creating horinux source reference..."
+        mkdir -p horinux
+        echo "https://github.com/suyu-emu/horinux.git" > horinux/source_url.txt
+        
+        echo "Creating holoiso source reference..."
+        mkdir -p holoiso
+        echo "https://github.com/holoiso-eol/holoiso.git" > holoiso/source_url.txt
+        
+        # Only clone one small repository for testing if this is a debug build
+        if [ "$BUILD_TYPE" = "debug" ] || [ "$BUILD_TYPE" = "testing" ]; then
+          echo "Cloning minimal horinux for testing build..."
+          git clone --depth 1 --single-branch https://github.com/suyu-emu/horinux.git horinux-actual || \
+          echo "Failed to clone horinux (non-critical for testing)"
+        fi
+        
+        # List what we prepared
+        echo "Emulator source preparation complete:"
         ls -la /tmp/emulator-sources/
+        du -sh /tmp/emulator-sources/
+        
+        echo "After emulator source preparation:"
+        show_disk_usage
 
-    - name: Pre-build emulators
+    - name: Prepare emulator build scripts (no pre-building)
       run: |
+        source ~/.bashrc
+        
+        echo "Creating emulator build scripts instead of pre-building..."
         cd /tmp/emulator-sources
         
-        # Build suyu if available
-        if [ -d "suyu" ]; then
-          echo "Pre-building suyu emulator..."
-          cd suyu
-          mkdir -p build && cd build
-          
-          cmake .. \
-            -GNinja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/usr/local \
-            -DENABLE_QT_TRANSLATION=ON \
-            -DENABLE_SDL2=ON \
-            -DENABLE_VULKAN=ON \
-            -DYUZU_USE_BUNDLED_VCPKG=OFF \
-            -DYUZU_USE_BUNDLED_FFMPEG=OFF \
-            -DYUZU_ENABLE_LTO=ON \
-            -DYUZU_CRASH_DUMPS=OFF \
-            -DYUZU_USE_PRECOMPILED_HEADERS=OFF || true
-          
-          ninja -j$(nproc) || echo "Suyu build failed, will use fallback"
-          cd /tmp/emulator-sources
-        fi
+        # Create build scripts that can be used later in the ISO
+        # This avoids the massive disk usage of pre-building during CI
         
-        # Build eden if available
-        if [ -d "eden" ]; then
-          echo "Pre-building eden emulator..."
-          cd eden
-          mkdir -p build && cd build
-          
-          cmake .. \
-            -GNinja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=/usr/local \
-            -DENABLE_QT_TRANSLATION=ON \
-            -DENABLE_SDL2=ON \
-            -DENABLE_VULKAN=ON || true
-          
-          ninja -j$(nproc) || echo "Eden build failed, will use fallback"
-          cd /tmp/emulator-sources
-        fi
+        cat > build_suyu.sh << 'EOF'
+#!/bin/bash
+# Suyu emulator build script
+set -e
+
+SUYU_URL="https://git.suyu.dev/suyu/suyu.git"
+SUYU_FALLBACK="https://github.com/suyu-emu/suyu.git"
+
+echo "Building suyu emulator..."
+cd /tmp
+git clone --recursive --depth 1 "$SUYU_URL" suyu-build || \
+git clone --recursive --depth 1 "$SUYU_FALLBACK" suyu-build || {
+  echo "Failed to clone suyu repository"
+  exit 1
+}
+
+cd suyu-build
+mkdir -p build && cd build
+
+cmake .. \
+  -GNinja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/usr/local \
+  -DENABLE_QT_TRANSLATION=ON \
+  -DENABLE_SDL2=ON \
+  -DENABLE_VULKAN=ON \
+  -DYUZU_USE_BUNDLED_VCPKG=OFF \
+  -DYUZU_USE_BUNDLED_FFMPEG=OFF \
+  -DYUZU_ENABLE_LTO=ON \
+  -DYUZU_CRASH_DUMPS=OFF \
+  -DYUZU_USE_PRECOMPILED_HEADERS=OFF
+
+ninja -j$(nproc)
+ninja install
+
+# Cleanup build directory to save space
+cd /tmp
+rm -rf suyu-build
+echo "Suyu build completed and installed"
+EOF
+
+        cat > build_eden.sh << 'EOF'
+#!/bin/bash
+# Eden emulator build script
+set -e
+
+EDEN_URL="https://git.eden-emu.dev/eden-emu/eden.git"
+
+echo "Building eden emulator..."
+cd /tmp
+git clone --recursive --depth 1 "$EDEN_URL" eden-build || {
+  echo "Failed to clone eden repository"
+  exit 1
+}
+
+cd eden-build
+mkdir -p build && cd build
+
+cmake .. \
+  -GNinja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/usr/local \
+  -DENABLE_QT_TRANSLATION=ON \
+  -DENABLE_SDL2=ON \
+  -DENABLE_VULKAN=ON
+
+ninja -j$(nproc)
+ninja install
+
+# Cleanup build directory to save space
+cd /tmp
+rm -rf eden-build
+echo "Eden build completed and installed"
+EOF
+
+        # Make scripts executable
+        chmod +x build_suyu.sh build_eden.sh
+        
+        echo "Build scripts created successfully:"
+        ls -la *.sh
+        
+        echo "After build script creation:"
+        show_disk_usage
 
     - name: Prepare ISO build environment
       run: |
-        # Copy emulator sources to airootfs for build during ISO creation
+        source ~/.bashrc
+        
+        echo "Preparing ISO build environment with optimized file handling..."
+        
+        # Create minimal emulator sources directory in airootfs
         mkdir -p airootfs/tmp/emulator-sources
+        
+        # Copy only the lightweight source references and build scripts
+        # This avoids copying large source trees
         cp -r /tmp/emulator-sources/* airootfs/tmp/emulator-sources/ 2>/dev/null || true
         
-        # Ensure build script is executable
-        chmod +x airootfs/usr/local/bin/build-emulators
-        chmod +x airootfs/usr/local/bin/suyuos-*
+        # Ensure build scripts are executable
+        chmod +x airootfs/usr/local/bin/build-emulators 2>/dev/null || true
+        chmod +x airootfs/usr/local/bin/suyuos-* 2>/dev/null || true
         
-        # Create build directory
+        # Create optimized build directories
         mkdir -p build-iso
-        mkdir -p /tmp/suyuos-build
+        
+        # Use a more efficient working directory location
+        # Avoid /tmp to prevent conflicts with system temp usage
+        mkdir -p /workspace/suyuos-build-work
+        
+        echo "Build environment prepared:"
+        du -sh airootfs/tmp/emulator-sources/ 2>/dev/null || echo "No emulator sources to measure"
+        du -sh /workspace/suyuos-build-work/
+        
+        echo "After ISO build environment preparation:"
+        show_disk_usage
 
     - name: Build suyuOS ISO
       run: |
-        # Fix the build command from BUILDING.md
-        mkarchiso -v -w '/tmp/suyuos-build' -o 'build-iso' .
+        source ~/.bashrc
+        
+        echo "Starting suyuOS ISO build with disk space monitoring..."
+        
+        # Clean up before starting the build
+        cleanup_pacman_cache
+        cleanup_temp_files
+        
+        echo "Pre-build cleanup complete:"
+        show_disk_usage
+        
+        # Use the optimized working directory and add progress monitoring
+        echo "Running mkarchiso with optimized settings..."
+        
+        # Run mkarchiso with the workspace working directory to avoid /tmp issues
+        mkarchiso -v -w '/workspace/suyuos-build-work' -o 'build-iso' . || {
+          echo "ISO build failed, checking disk space and logs..."
+          show_disk_usage
+          
+          # Show recent log entries if available
+          find /workspace/suyuos-build-work -name "*.log" -exec tail -50 {} \; 2>/dev/null || true
+          
+          exit 1
+        }
+        
+        echo "ISO build completed successfully:"
+        show_disk_usage
       
     - name: Verify ISO build
       run: |
+        source ~/.bashrc
+        
         if [ -f build-iso/*.iso ]; then
           echo "✓ ISO build successful!"
           ls -lh build-iso/*.iso
@@ -185,10 +375,32 @@ jobs:
           
           echo "Build artifacts:"
           ls -la
+          
+          echo "Final disk usage after successful build:"
+          show_disk_usage
         else
           echo "✗ ISO build failed!"
+          echo "Final disk usage after failed build:"
+          show_disk_usage
           exit 1
         fi
+
+    - name: Cleanup build artifacts to save space
+      run: |
+        source ~/.bashrc
+        
+        echo "Cleaning up build working directory to save space..."
+        
+        # Remove the large working directory but keep the ISO
+        rm -rf /workspace/suyuos-build-work 2>/dev/null || true
+        rm -rf /tmp/emulator-sources 2>/dev/null || true
+        
+        # Final cleanup
+        cleanup_pacman_cache
+        cleanup_temp_files
+        
+        echo "After cleanup:"
+        show_disk_usage
 
     - name: Upload ISO artifact
       uses: actions/upload-artifact@v4
@@ -207,8 +419,8 @@ jobs:
       with:
         name: build-logs-${{ github.sha }}
         path: |
-          /tmp/suyuos-build/work/*/build.log
-          /tmp/suyuos-build/work/*/airootfs.log
+          /workspace/suyuos-build-work/work/*/build.log
+          /workspace/suyuos-build-work/work/*/airootfs.log
         retention-days: 7
 
   create-release:
