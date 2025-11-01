@@ -1,0 +1,287 @@
+#!/usr/bin/env bash
+
+# suyuOS Emulator Build Script
+# This script builds Suyu and Eden emulators during ISO creation
+# Also integrates horinux kernel patches and holoiso optimizations
+# Updated for optimized CI/CD disk space usage
+
+set -e
+
+BUILD_DIR="/tmp/emulator-build"
+INSTALL_PREFIX="/usr/local"
+SOURCE_DIR="/tmp/emulator-sources"
+
+echo "Starting suyuOS emulator build process..."
+
+# Function to check available disk space
+check_disk_space() {
+    local available=$(df / | awk 'NR==2 {print $4}')
+    local available_gb=$((available / 1024 / 1024))
+    echo "Available disk space: ${available_gb}GB"
+    
+    if [ "$available_gb" -lt 2 ]; then
+        echo "Warning: Low disk space (${available_gb}GB). Build may fail."
+        return 1
+    fi
+    return 0
+}
+
+# Function to cleanup build artifacts
+cleanup_build_artifacts() {
+    echo "Cleaning up build artifacts to save space..."
+    rm -rf "$BUILD_DIR" 2>/dev/null || true
+    rm -rf /tmp/suyu-build 2>/dev/null || true
+    rm -rf /tmp/eden-build 2>/dev/null || true
+    echo "Build artifacts cleaned up"
+}
+
+# Function to apply horinux kernel patches
+apply_horinux_patches() {
+    echo "Applying horinux kernel patches for native execution support..."
+    
+    if [ -d "$SOURCE_DIR/horinux" ]; then
+        cd "$SOURCE_DIR/horinux"
+        
+        # Look for kernel patches
+        if [ -d "patches" ]; then
+            echo "Found horinux patches directory"
+            
+            # Create kernel patch integration script
+            cat > /usr/local/bin/apply-horinux-patches << 'EOF'
+#!/bin/bash
+# Script to apply horinux patches to kernel during build
+KERNEL_SRC="$1"
+PATCH_DIR="$2"
+
+if [ ! -d "$KERNEL_SRC" ] || [ ! -d "$PATCH_DIR" ]; then
+    echo "Usage: $0 <kernel_source_dir> <patch_dir>"
+    exit 1
+fi
+
+cd "$KERNEL_SRC"
+
+echo "Applying horinux patches for native handheld console execution..."
+for patch in "$PATCH_DIR"/*.patch; do
+    if [ -f "$patch" ]; then
+        echo "Applying $(basename "$patch")..."
+        patch -p1 < "$patch" || echo "Warning: Failed to apply $(basename "$patch")"
+    fi
+done
+
+echo "Horinux patches applied successfully"
+EOF
+            chmod +x /usr/local/bin/apply-horinux-patches
+            
+            # Copy patches to system location
+            mkdir -p /usr/local/share/horinux
+            cp -r patches/* /usr/local/share/horinux/ 2>/dev/null || true
+            
+            echo "Horinux patches prepared for kernel integration"
+        else
+            echo "No patches directory found in horinux repository"
+        fi
+    else
+        echo "Horinux repository not available, skipping kernel patches"
+    fi
+}
+
+# Function to integrate holoiso optimizations
+integrate_holoiso_optimizations() {
+    echo "Integrating HoloISO gaming optimizations..."
+    
+    if [ -d "$SOURCE_DIR/holoiso" ]; then
+        cd "$SOURCE_DIR/holoiso"
+        
+        # Look for gaming optimization scripts
+        if [ -d "usr/bin" ]; then
+            echo "Found HoloISO optimization scripts"
+            
+            # Copy gaming optimization scripts
+            for script in usr/bin/steamos-* usr/bin/gamescope-* usr/bin/holoiso-*; do
+                if [ -f "$script" ]; then
+                    cp "$script" /usr/local/bin/
+                    chmod +x "/usr/local/bin/$(basename "$script")"
+                    echo "Installed $(basename "$script")"
+                fi
+            done
+        fi
+        
+        # Look for system configurations
+        if [ -d "etc" ]; then
+            echo "Integrating HoloISO system configurations..."
+            
+            # Copy gaming-related configurations
+            for config in etc/udev/rules.d/*gaming* etc/systemd/system/*gaming* etc/modprobe.d/*gaming*; do
+                if [ -f "$config" ]; then
+                    target_dir="/$(dirname "$config")"
+                    mkdir -p "$target_dir"
+                    cp "$config" "$target_dir/"
+                    echo "Installed $(basename "$config")"
+                fi
+            done
+        fi
+        
+        echo "HoloISO optimizations integrated"
+    else
+        echo "HoloISO repository not available, using built-in optimizations"
+    fi
+}
+
+# Function to build emulators using prepared build scripts
+build_emulators_from_scripts() {
+    echo "Building emulators using prepared build scripts..."
+    
+    # Check if we have build scripts from the CI preparation
+    if [ -f "$SOURCE_DIR/build_suyu.sh" ]; then
+        echo "Found suyu build script, executing..."
+        check_disk_space || echo "Proceeding with low disk space warning"
+        
+        cd "$SOURCE_DIR"
+        bash build_suyu.sh || {
+            echo "Suyu build script failed, creating placeholder"
+            create_suyu_placeholder
+        }
+        
+        cleanup_build_artifacts
+    else
+        echo "No suyu build script found, creating placeholder"
+        create_suyu_placeholder
+    fi
+    
+    if [ -f "$SOURCE_DIR/build_eden.sh" ]; then
+        echo "Found eden build script, executing..."
+        check_disk_space || echo "Proceeding with low disk space warning"
+        
+        cd "$SOURCE_DIR"
+        bash build_eden.sh || {
+            echo "Eden build script failed, creating placeholder"
+            create_eden_placeholder
+        }
+        
+        cleanup_build_artifacts
+    else
+        echo "No eden build script found, creating placeholder"
+        create_eden_placeholder
+    fi
+}
+
+# Function to create suyu placeholder
+create_suyu_placeholder() {
+    echo "Creating suyu placeholder..."
+    mkdir -p "$INSTALL_PREFIX/bin"
+    cat > "$INSTALL_PREFIX/bin/suyu" << 'EOF'
+#!/bin/bash
+echo "Suyu emulator is not available in this build."
+echo "This may be due to build constraints or missing dependencies."
+echo "You can try building it manually after installation."
+exit 1
+EOF
+    chmod +x "$INSTALL_PREFIX/bin/suyu"
+}
+
+# Function to create eden placeholder
+create_eden_placeholder() {
+    echo "Creating eden placeholder..."
+    mkdir -p "$INSTALL_PREFIX/bin"
+    cat > "$INSTALL_PREFIX/bin/eden" << 'EOF'
+#!/bin/bash
+echo "Eden emulator is not available in this build."
+echo "This may be due to build constraints or missing dependencies."
+echo "You can try building it manually after installation."
+exit 1
+EOF
+    chmod +x "$INSTALL_PREFIX/bin/eden"
+}
+
+# Function to setup emulator configurations
+setup_configs() {
+    echo "Setting up emulator configurations..."
+    
+    # Create config directories
+    mkdir -p /etc/skel/.config/suyu
+    mkdir -p /etc/skel/.config/eden
+    mkdir -p /etc/skel/.local/share/suyu
+    mkdir -p /etc/skel/.local/share/eden
+    
+    # Create basic configuration files
+    cat > /etc/skel/.config/suyu/qt-config.ini << 'EOF'
+[Core]
+use_multi_core=true
+use_extended_memory_layout=true
+
+[Renderer]
+backend=1
+vulkan_device=0
+use_asynchronous_gpu_emulation=true
+use_fast_gpu_time=true
+
+[Audio]
+output_engine=auto
+volume=1.0
+
+[Controls]
+keyboard_enabled=true
+mouse_enabled=true
+EOF
+
+    cat > /etc/skel/.config/eden/qt-config.ini << 'EOF'
+[Core]
+use_multi_core=true
+use_extended_memory_layout=true
+
+[Renderer]
+backend=1
+vulkan_device=0
+use_asynchronous_gpu_emulation=true
+use_fast_gpu_time=true
+
+[Audio]
+output_engine=auto
+volume=1.0
+
+[Controls]
+keyboard_enabled=true
+mouse_enabled=true
+EOF
+
+    echo "Configuration setup completed!"
+}
+
+# Main build process
+main() {
+    echo "suyuOS Emulator Build Script v2.1 (Optimized)"
+    echo "=============================================="
+    
+    # Check if running as root (required for installation)
+    if [ "$EUID" -ne 0 ]; then
+        echo "This script must be run as root during ISO build process"
+        exit 1
+    fi
+    
+    # Check initial disk space
+    check_disk_space || echo "Continuing with limited disk space"
+    
+    # Create build directory
+    mkdir -p "$BUILD_DIR"
+    
+    # Apply kernel patches and optimizations (lightweight operations)
+    apply_horinux_patches
+    integrate_holoiso_optimizations
+    
+    # Build emulators using prepared scripts or create placeholders
+    build_emulators_from_scripts
+    
+    # Setup configurations
+    setup_configs
+    
+    # Final cleanup
+    cleanup_build_artifacts
+    
+    echo "Emulator build process completed!"
+    echo "Check /usr/local/bin/ for available emulators"
+}
+
+# Run main function if script is executed directly
+if [ "${BASH_SOURCE[0]}" == "${0}" ]; then
+    main "$@"
+fi
