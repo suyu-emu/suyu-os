@@ -1,0 +1,65 @@
+#!/usr/bin/bash
+
+# suyuOS Gaming Hook for mkinitcpio
+# Integrates Horinux kernel patches and gaming optimizations into initramfs
+
+build() {
+    # Add gaming-related modules
+    add_module switch_hid
+    add_module switch_audio
+    add_module switch_gpu
+    add_module uinput
+    add_module joydev
+    add_module evdev
+    add_module hid_nintendo
+    
+    # Add gaming optimization binaries
+    add_binary /usr/local/bin/suyuos-optimize
+    add_binary /usr/local/bin/suyuos-restore
+    
+    # Add controller support
+    add_udev_rule '99-nintendo-switch-controllers.conf'
+    
+    # Add gaming configuration files
+    add_file /etc/modprobe.d/suyuos-gaming.conf
+    add_file /etc/sysctl.d/99-suyuos-gaming.conf
+    
+    # Add this hook
+    add_runscript
+}
+
+help() {
+    cat << HELPEOF
+This hook provides Nintendo Switch hardware emulation support and gaming
+optimizations for suyuOS. It integrates Horinux kernel patches for low-level
+Switch application execution and applies system-wide gaming optimizations.
+
+Features:
+- Switch hardware abstraction layer modules
+- Gaming controller support (Joy-Con, Pro Controller)
+- Audio/video optimization for emulation
+- Memory and CPU optimizations for gaming performance
+- Network optimizations for online gaming
+
+This hook should be added after 'base' and 'udev' in the HOOKS array.
+HELPEOF
+}
+
+run_hook() {
+    # Load Switch hardware emulation modules
+    modprobe switch_hid 2>/dev/null || true
+    modprobe switch_audio 2>/dev/null || true
+    modprobe switch_gpu 2>/dev/null || true
+    
+    # Load gaming input modules
+    modprobe uinput 2>/dev/null || true
+    modprobe joydev 2>/dev/null || true
+    modprobe evdev 2>/dev/null || true
+    modprobe hid_nintendo 2>/dev/null || true
+    
+    # Apply early gaming optimizations
+    echo 10 > /proc/sys/vm/swappiness 2>/dev/null || true
+    echo performance > /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 2>/dev/null || true
+    
+    msg ":: suyuOS gaming optimizations loaded"
+}

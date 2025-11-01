@@ -32,12 +32,13 @@ f2fs-tools
 fatresize
 foot-terminfo
 fsarchiver
-gnu-netcat
+openbsd-netcat
 gpart
 gpm
 gptfdisk
 grml-zsh-config
 grub
+efitools
 hdparm
 hyperv
 intel-ucode
@@ -94,7 +95,7 @@ pv
 qemu-guest-agent
 refind
 reflector
-reiserfsprogs
+# reiserfsprogs - package removed from Arch repos
 rp-pppoe
 rsync
 rxvt-unicode-terminfo
@@ -121,7 +122,7 @@ usbutils
 vim
 virtualbox-guest-utils-nox
 vpnc
-wezterm-terminfo
+# wezterm-terminfo - package not found in repos
 wireless-regdb
 wireless_tools
 wpa_supplicant
@@ -146,8 +147,8 @@ ninja
 nlohmann-json
 openssl
 opus
-qt5
-sdl2
+qt5-base
+# sdl2 - package not found in repos, using alternatives
 zlib
 zstd
 zip
@@ -158,7 +159,7 @@ ccache
 btop
 htop
 fastfetch
-neofetch
+# neofetch - package removed from Arch repos
 lshw
 stress
 xmrig
@@ -218,5 +219,56 @@ mame
 ppsspp
 mupen64plus
 snes9x
-vbam-sdl
+# vbam-sdl - package not found in repos
 stella
+
+# Handheld Console Emulation Dependencies
+vulkan-headers
+vulkan-validation-layers
+spirv-tools
+glfw
+libusb
+hidapi
+libevdev
+# libudev0-shim - package not found in repos
+fmt
+rapidjson
+mbedtls
+# cubeb - package not found in repos
+# discord-rpc - package not found in repos
+# cpp-httplib - package not found in repos
+enet
+# libressl - conflicts with openssl, removing
+libzip
+lz4
+zstd
+# xbyak - package not found in repos
+
+# Audio/Video Codecs for Handheld Console Games
+ffmpeg
+opus
+vorbis-tools
+libvorbis
+libogg
+
+# Cryptographic Libraries
+libgcrypt
+nettle
+gnutls
+
+# Gaming Optimizations (HoloISO-inspired)
+gamemode
+mangohud
+gamescope
+
+# Controller Support
+libevdev
+xf86-input-evdev
+# jstest-gtk - package not found in repos
+antimicrox
+
+# File System Support
+fuse2
+fuse3
+ntfs-3g
+exfat-utils

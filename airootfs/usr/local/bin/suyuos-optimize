@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+
+# suyuOS Gaming Optimization Script
+# Applies system-wide gaming optimizations inspired by HoloISO
+
+set -e
+
+echo "Applying suyuOS gaming optimizations..."
+
+# CPU optimizations
+echo "Configuring CPU optimizations..."
+
+# Set CPU governor to performance for better gaming performance
+echo performance > /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 2>/dev/null || true
+
+# Disable CPU idle states for lower latency
+echo 1 > /sys/devices/system/cpu/cpu*/cpuidle/state*/disable 2>/dev/null || true
+
+# Set CPU scheduler to gaming-optimized settings
+echo 1000000 > /proc/sys/kernel/sched_latency_ns 2>/dev/null || true
+echo 100000 > /proc/sys/kernel/sched_min_granularity_ns 2>/dev/null || true
+echo 25000 > /proc/sys/kernel/sched_wakeup_granularity_ns 2>/dev/null || true
+
+# Memory optimizations
+echo "Configuring memory optimizations..."
+
+# Reduce swappiness for better gaming performance
+echo 10 > /proc/sys/vm/swappiness
+
+# Optimize dirty page writeback for gaming
+echo 15 > /proc/sys/vm/dirty_background_ratio
+echo 25 > /proc/sys/vm/dirty_ratio
+
+# Network optimizations for online gaming
+echo "Configuring network optimizations..."
+
+# TCP congestion control
+echo bbr > /proc/sys/net/ipv4/tcp_congestion_control 2>/dev/null || true
+
+# Reduce network latency
+echo 1 > /proc/sys/net/ipv4/tcp_low_latency 2>/dev/null || true
+echo 1 > /proc/sys/net/ipv4/tcp_no_delay_ack 2>/dev/null || true
+
+# GPU optimizations
+echo "Configuring GPU optimizations..."
+
+# NVIDIA optimizations
+if command -v nvidia-smi > /dev/null 2>&1; then
+    # Enable persistence mode
+    nvidia-smi -pm 1 2>/dev/null || true
+    
+    # Set maximum performance mode
+    nvidia-smi -ac 4004,1911 2>/dev/null || true
+    
+    # Set power limit to maximum
+    nvidia-smi -pl 300 2>/dev/null || true
+fi
+
+# AMD GPU optimizations
+if [ -d "/sys/class/drm/card0/device" ]; then
+    # Set performance profile
+    echo high > /sys/class/drm/card0/device/power_dpm_force_performance_level 2>/dev/null || true
+fi
+
+# Audio optimizations
+echo "Configuring audio optimizations..."
+
+# Set audio buffer size for low latency
+if [ -f "/etc/pulse/daemon.conf" ]; then
+    sed -i 's/.*default-sample-rate.*/default-sample-rate = 48000/' /etc/pulse/daemon.conf
+    sed -i 's/.*default-fragments.*/default-fragments = 2/' /etc/pulse/daemon.conf
+    sed -i 's/.*default-fragment-size-msec.*/default-fragment-size-msec = 5/' /etc/pulse/daemon.conf
+fi
+
+# I/O scheduler optimizations
+echo "Configuring I/O scheduler optimizations..."
+
+# Set I/O scheduler to deadline for SSDs, cfq for HDDs
+for disk in /sys/block/sd*; do
+    if [ -f "$disk/queue/rotational" ]; then
+        if [ "$(cat "$disk/queue/rotational")" = "0" ]; then
+            # SSD - use deadline scheduler
+            echo deadline > "$disk/queue/scheduler" 2>/dev/null || true
+        else
+            # HDD - use cfq scheduler
+            echo cfq > "$disk/queue/scheduler" 2>/dev/null || true
+        fi
+    fi
+done
+
+# NVMe optimizations
+for disk in /sys/block/nvme*; do
+    if [ -d "$disk" ]; then
+        echo none > "$disk/queue/scheduler" 2>/dev/null || true
+    fi
+done
+
+# Controller optimizations
+echo "Configuring controller optimizations..."
+
+# Increase USB polling rate for controllers
+echo 1 > /sys/module/usbhid/parameters/mousepoll 2>/dev/null || true
+
+# Enable raw input for better controller response
+modprobe uinput 2>/dev/null || true
+
+# Gaming-specific kernel parameters
+echo "Applying gaming-specific kernel parameters..."
+
+# Disable transparent huge pages for better gaming performance
+echo never > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
+echo never > /sys/kernel/mm/transparent_hugepage/defrag 2>/dev/null || true
+
+# Optimize kernel timer frequency
+echo 1000 > /proc/sys/kernel/timer_migration 2>/dev/null || true
+
+# Process priority optimizations
+echo "Configuring process priorities..."
+
+# Set higher priority for audio processes
+pgrep -f "pulseaudio|pipewire" | xargs -I {} renice -10 {} 2>/dev/null || true
+
+# Set real-time priority for critical gaming processes
+pgrep -f "suyu|eden" | xargs -I {} chrt -f -p 50 {} 2>/dev/null || true
+
+echo "suyuOS gaming optimizations applied successfully!"
+
+# Log optimization status
+echo "$(date): Gaming optimizations applied" >> /var/log/suyuos-gaming.log
