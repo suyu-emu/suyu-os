@@ -213,6 +213,7 @@ jobs:
         # This avoids the massive disk usage of pre-building during CI
         
         cat > build_suyu.sh << 'EOF'
+        EOF
 #!/bin/bash
 # Suyu emulator build script
 set -e
