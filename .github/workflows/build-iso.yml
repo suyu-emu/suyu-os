@@ -67,10 +67,10 @@ jobs:
       run: |
         source ~/.bashrc
         
-        # Update system and install Git first (required for checkout)
-        echo "Updating system and installing Git..."
+        # Update system and install Git first (required for checkout) and bash (otherwise line 218 and other bash dependent commands wouldnt work)
+        echo "Updating system and installing Git and Bash..."
         pacman -Syu --noconfirm
-        pacman -S --noconfirm git
+        pacman -S --noconfirm git bash
         
         # Clean up after initial installation
         cleanup_pacman_cache
