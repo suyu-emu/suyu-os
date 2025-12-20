@@ -28,7 +28,7 @@ jobs:
       options: --privileged
     
     steps:
-    - name: Check initial disk space and setup monitoring
+     - name: Check initial disk space and setup monitoring
       run: |
         # Function to display disk usage
         show_disk_usage() {
